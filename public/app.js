@@ -1,4 +1,4 @@
-/* ═══════════════════════════════════════════════════════════════
+﻿/* ═══════════════════════════════════════════════════════════════
    NHI 健保藥品查詢系統 - app.js
    功能：搜尋、URL Deep Link、無限捲動、Tag 點擊、詳情 Panel
    ═══════════════════════════════════════════════════════════════ */
@@ -228,21 +228,29 @@ function renderResults(append = false) {
 
   if (!hasResults) { showState('noResults'); return; }
 
-  showState('results');
+  // 明確隱藏所有非結果狀態元素，避免競態條件
+  emptyState.hidden    = true;
+  loadingState.hidden  = true;
+  noResults.hidden     = true;
+  resultsMeta.hidden   = false;
   resultsCount.textContent = `共 ${Number(state.total).toLocaleString()} 筆，顯示 ${state.results.length} 筆`;
 
   if (state.viewMode === 'card') {
+    resultsTableWrap.hidden = true;
     if (!append) resultsList.innerHTML = '';
     const items = append ? state.results.slice(-100) : state.results;
     const frag = document.createDocumentFragment();
     items.forEach(drug => frag.appendChild(createDrugCard(drug)));
     resultsList.appendChild(frag);
+    resultsList.hidden = false;
   } else {
+    resultsList.hidden = true;
     if (!append) resultsTableBody.innerHTML = '';
     const items = append ? state.results.slice(-100) : state.results;
     const frag = document.createDocumentFragment();
     items.forEach(drug => frag.appendChild(createTableRow(drug)));
     resultsTableBody.appendChild(frag);
+    resultsTableWrap.hidden = false;
   }
 }
 
