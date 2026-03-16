@@ -40,6 +40,20 @@ export async function onRequestGet({ request, env }) {
   const page = Math.max(1, parseInt(p.get('page') || '1'));
   const offset = (page - 1) * PAGE_SIZE;
 
+  const sortBy = p.get('sort_by') || '';
+  const order = (p.get('order') || '').toLowerCase() === 'desc' ? 'DESC' : 'ASC';
+  const exportCsv = p.get('export') === 'csv';
+
+  const validSortColumns = ['藥品代號', '藥品中文名稱', '成分', '劑型', 'ATC代碼', '支付價'];
+  let orderByClause = 'ORDER BY 藥品代號 ASC';
+  if (validSortColumns.includes(sortBy)) {
+    if (sortBy === '支付價') {
+      orderByClause = `ORDER BY CAST(支付價 AS REAL) ${order}, 藥品代號 ASC`;
+    } else {
+      orderByClause = `ORDER BY "${sortBy}" ${order}, 藥品代號 ASC`;
+    }
+  }
+
   const conditions = [];
   const params = [];
 
@@ -51,7 +65,14 @@ export async function onRequestGet({ request, env }) {
   }
 
   // 精確/模糊 AND 條件
-  if (成分) { conditions.push(`成分 LIKE ?`); params.push(`%${成分}%`); }
+  // 支援逗號分隔的多成分查詢：每個成分都必須 LIKE 匹配
+  if (成分) {
+    const ingredients = 成分.split(',').map(s => s.trim()).filter(Boolean);
+    ingredients.forEach(ing => {
+      conditions.push(`成分 LIKE ?`);
+      params.push(`%${ing}%`);
+    });
+  }
   if (劑型) { conditions.push(`劑型 = ?`); params.push(劑型); }
   if (藥品分類) { conditions.push(`藥品分類 = ?`); params.push(藥品分類); }
   if (分類分組) { conditions.push(`分類分組名稱 = ?`); params.push(分類分組); }
@@ -63,16 +84,52 @@ export async function onRequestGet({ request, env }) {
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
   try {
-    // 計算總筆數
+    // 匯出 CSV 模式
+    if (exportCsv) {
+      const dataResult = await env.DB.prepare(
+        `SELECT * FROM nhi_drugs ${where} ${orderByClause}`
+      ).bind(...params).all();
+
+      const rows = dataResult.results;
+      if (rows.length === 0) {
+        return new Response('\uFEFF無搜尋結果', {
+          headers: { ...CORS_HEADERS, 'Content-Type': 'text/csv; charset=utf-8' }
+        });
+      }
+
+      // 產生 CSV
+      const headers = Object.keys(rows[0]);
+      let csvContent = '\uFEFF' + headers.join(',') + '\n';
+      
+      for (const r of rows) {
+        const rowData = headers.map(k => {
+          let val = r[k] === null || r[k] === undefined ? '' : String(r[k]);
+          val = val.replace(/"/g, '""'); // CSV 跳脫雙引號
+          return `"${val}"`;
+        });
+        csvContent += rowData.join(',') + '\n';
+      }
+
+      const dateStr = new Date().toISOString().split('T')[0];
+      return new Response(csvContent, {
+        headers: {
+          ...CORS_HEADERS,
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': `attachment; filename="nhi_drugs_export_${dateStr}.csv"`
+        }
+      });
+    }
+
+    // 計算總筆數 (僅非匯出模式需要)
     const countResult = await env.DB.prepare(
       `SELECT COUNT(*) as total FROM nhi_drugs ${where}`
     ).bind(...params).first();
 
     const total = countResult?.total ?? 0;
 
-    // 取得資料（順序: 藥品中文名)
+    // 一般分頁查詢
     const dataResult = await env.DB.prepare(
-      `SELECT * FROM nhi_drugs ${where} ORDER BY 藥品代號 ASC LIMIT ? OFFSET ?`
+      `SELECT * FROM nhi_drugs ${where} ${orderByClause} LIMIT ? OFFSET ?`
     ).bind(...params, PAGE_SIZE, offset).all();
 
     return new Response(JSON.stringify({

@@ -1,4 +1,4 @@
-﻿/* ═══════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════
    NHI 健保藥品查詢系統 - app.js
    功能：搜尋、URL Deep Link、無限捲動、Tag 點擊、詳情 Panel
    ═══════════════════════════════════════════════════════════════ */
@@ -29,6 +29,9 @@ let state = {
   loading: false,
   loadingMore: false,
   viewMode: 'card',   // 'card' | 'table'
+  sortBy: '',         // 排序欄位
+  sortOrder: 'asc',   // 排序方向
+  ingredients: [],    // 累加的成分篩選條件
 };
 
 // ─── DOM 參照 ─────────────────────────────────────────────────────
@@ -133,7 +136,11 @@ function readUrlAndSearch() {
   // 讀取搜尋條件
   const q = urlParams.get('q') || '';
   if (q) searchInput.value = q;
-  if (urlParams.get('成分'))         filterATC.value = '';  // 直接在進階搜尋
+  // 從 URL 還原成分篩選（支援多成分，逗號分隔）
+  const ingredientParam = urlParams.get('成分') || '';
+  if (ingredientParam) {
+    state.ingredients = ingredientParam.split(',').map(s => s.trim()).filter(Boolean);
+  }
   if (urlParams.get('ATC代碼'))      filterATC.value = urlParams.get('ATC代碼') || '';
   if (urlParams.get('劑型'))         filterDosageForm.value = urlParams.get('劑型') || '';
   if (urlParams.get('藥品分類'))     filterCategory.value = urlParams.get('藥品分類') || '';
@@ -152,6 +159,8 @@ function collectQuery() {
   const q = {};
   const kw = searchInput.value.trim();
   if (kw) q.q = kw;
+  // 將累加的成分以逗號分隔傳給 API
+  if (state.ingredients.length > 0) q['成分'] = state.ingredients.join(',');
   const dosage = filterDosageForm.value;
   if (dosage) q['劑型'] = dosage;
   const cat = filterCategory.value;
@@ -199,6 +208,11 @@ async function fetchResults(append = false) {
   }
 
   const params = new URLSearchParams({ ...state.query, page: state.page });
+  if (state.sortBy) {
+    params.set('sort_by', state.sortBy);
+    params.set('order', state.sortOrder);
+  }
+  
   try {
     const res = await fetch(`${API_BASE}/drugs?${params}`);
     const data = await res.json();
@@ -358,11 +372,11 @@ function openDetailPanel(drug) {
   detailTitle.textContent = drug['藥品中文名稱'] || '藥品詳情';
   detailBody.innerHTML = buildDetailHTML(drug);
 
-  // 綁定 tag 點擊
-  detailBody.querySelectorAll('.field-tag[data-field]').forEach(tag => {
-    tag.addEventListener('click', () => {
-      applyTagToFilter(tag.dataset.field, tag.dataset.value);
-      showToast(`已帶入「${tag.dataset.field}」篩選條件`);
+  // 綁定 tag 點擊與成分加入按鈕
+  detailBody.querySelectorAll('.field-tag[data-field], .filter-add-btn[data-field]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      applyTagToFilter(btn.dataset.field, btn.dataset.value);
+      showToast(`已帶入「${btn.dataset.field}」篩選條件`);
     });
   });
 
@@ -445,11 +459,14 @@ function buildDetailHTML(d) {
     <!-- 成分與分類 -->
     <div class="detail-section">
       <div class="detail-section-title">成分與分類</div>
-      ${d['成分'] ? `<div class="detail-row">
-        <span class="detail-row-label">成分</span>
-        <div class="detail-tags">
-          ${d['成分'].split(/[,/;，]/).map(s => s.trim()).filter(Boolean).map(s =>
-            `<span class="field-tag" data-field="成分" data-value="${esc(s)}" title="點擊帶入搜尋">${svgPlus()}${esc(s)}</span>`
+      ${d['成分'] ? `<div class="detail-row" style="flex-direction: column; gap: 4px;">
+        <span class="detail-row-label" style="margin-bottom: 2px;">成分</span>
+        <div class="ingredient-list">
+          ${d['成分'].split(/[,/;，+]/).map(s => s.trim()).filter(Boolean).map(s =>
+            `<div class="ingredient-item">
+               <div class="ingredient-text">${esc(s)}</div>
+               <button class="filter-add-btn" data-field="成分" data-value="${esc(s)}" title="點擊帶入搜尋" aria-label="帶入 ${esc(s)} 作為搜尋條件">${svgPlus()}</button>
+             </div>`
           ).join('')}
         </div>
       </div>` : ''}
@@ -520,8 +537,10 @@ function applyTagToFilter(field, value) {
   let applied = false;
   switch(field) {
     case '成分':
-      // 成分直接填入搜尋框作為 q（更直觀）
-      searchInput.value = value;
+      // 成分累加到 state.ingredients（去重）
+      if (!state.ingredients.includes(value)) {
+        state.ingredients.push(value);
+      }
       applied = true;
       break;
     case '劑型':          filterDosageForm.value  = value; applied = true; break;
@@ -549,6 +568,10 @@ function applyTagToFilter(field, value) {
 function updateActiveFilterTags(query) {
   const tags = [];
   if (query.q) tags.push({ label: `關鍵字：${query.q}`, field: 'q' });
+  // 每個成分獨立顯示為一個 tag
+  state.ingredients.forEach((ing, idx) => {
+    tags.push({ label: `成分：${ing}`, field: `成分_${idx}`, ingredientIndex: idx });
+  });
   if (query['劑型'])         tags.push({ label: `劑型：${query['劑型']}`, field: '劑型' });
   if (query['藥品分類'])     tags.push({ label: `分類：${query['藥品分類']}`, field: '藥品分類' });
   if (query['分類分組名稱']) tags.push({ label: `分組：${query['分類分組名稱']}`, field: '分類分組名稱' });
@@ -570,6 +593,14 @@ function updateActiveFilterTags(query) {
 }
 
 window.removeFilter = function(field) {
+  // 檢查是否為成分 tag（格式：成分_0, 成分_1, ...）
+  const ingredientMatch = field.match(/^成分_(\d+)$/);
+  if (ingredientMatch) {
+    const idx = parseInt(ingredientMatch[1]);
+    state.ingredients.splice(idx, 1);
+    doSearch();
+    return;
+  }
   switch(field) {
     case 'q': searchInput.value = ''; break;
     case '劑型':         filterDosageForm.value = ''; break;
@@ -626,6 +657,7 @@ function setupEventListeners() {
   });
   clearAllBtn.addEventListener('click', () => {
     searchInput.value = '';
+    state.ingredients = [];  // 清除所有成分條件
     filterDosageForm.value = '';
     filterCategory.value = '';
     filterSubCategory.value = '';
@@ -640,6 +672,44 @@ function setupEventListeners() {
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDetailPanel(); });
   viewCard.addEventListener('click', () => setViewMode('card'));
   viewTable.addEventListener('click', () => setViewMode('table'));
+
+  // 排序事件
+  document.querySelectorAll('th.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+      const field = th.dataset.sort;
+      if (state.sortBy === field) {
+        state.sortOrder = state.sortOrder === 'asc' ? 'desc' : 'asc';
+      } else {
+        state.sortBy = field;
+        state.sortOrder = 'asc';
+      }
+      updateSortUi();
+      doSearch();
+    });
+  });
+
+  // 匯出 CSV 事件
+  const exportBtn = $('exportCsvBtn');
+  if (exportBtn) {
+    exportBtn.addEventListener('click', () => {
+      const params = new URLSearchParams(state.query);
+      if (state.sortBy) {
+        params.set('sort_by', state.sortBy);
+        params.set('order', state.sortOrder);
+      }
+      params.set('export', 'csv');
+      window.open(`${API_BASE}/drugs?${params}`, '_blank');
+    });
+  }
+}
+
+function updateSortUi() {
+  document.querySelectorAll('th.sortable').forEach(th => {
+    th.classList.remove('sort-asc', 'sort-desc');
+    if (th.dataset.sort === state.sortBy) {
+      th.classList.add(state.sortOrder === 'asc' ? 'sort-asc' : 'sort-desc');
+    }
+  });
 }
 
 // ─── 工具函式 ─────────────────────────────────────────────────────

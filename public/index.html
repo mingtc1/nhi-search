@@ -89,7 +89,7 @@
               <label for="filterSubCategory">分類分組</label>
               <select id="filterSubCategory"><option value="">全部</option></select>
             </div>
-            <div class="filter-group">
+            <div class="filter-group filter-group--full">
               <label>單複方</label>
               <div class="radio-group">
                 <label class="radio-label"><input type="radio" name="singleCompound" value="" checked /> 全部</label>
@@ -120,6 +120,11 @@
       <div class="results-meta" id="resultsMeta" hidden>
         <span id="resultsCount"></span>
         <div class="view-toggle" role="group" aria-label="顯示方式">
+          <button class="btn btn-sm btn-ghost" id="exportCsvBtn" style="margin-right: 8px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;margin-right:4px;">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>匯出 CSV
+          </button>
           <button class="view-btn active" id="viewCard" title="卡片視圖" aria-label="卡片視圖">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
@@ -172,13 +177,13 @@
         <table class="results-table">
           <thead>
             <tr>
-              <th>藥品代號</th>
-              <th>藥品中文名稱</th>
-              <th>成分</th>
-              <th>劑型</th>
-              <th>ATC 代碼</th>
-              <th>支付價</th>
-              <th></th>
+              <th class="sortable" data-sort="藥品代號">藥品代號 <span class="sort-icon"></span></th>
+              <th class="sortable" data-sort="藥品中文名稱">藥品中文名稱 <span class="sort-icon"></span></th>
+              <th class="sortable" data-sort="成分">成分 <span class="sort-icon"></span></th>
+              <th class="sortable" data-sort="劑型">劑型 <span class="sort-icon"></span></th>
+              <th class="sortable" data-sort="ATC代碼">ATC 代碼 <span class="sort-icon"></span></th>
+              <th class="sortable" data-sort="支付價">支付價 <span class="sort-icon"></span></th>
+              <th>詳細</th>
             </tr>
           </thead>
           <tbody id="resultsTableBody"></tbody>
@@ -210,7 +215,10 @@
 
   <!-- ── 頁尾 ─────────────────────────────────────── -->
   <footer class="site-footer">
-    <p>資料來源：<a href="https://www.nhi.gov.tw" target="_blank" rel="noopener">衛福部中央健康保險署</a></p>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+      <p>資料來源：衛福部中央健康保險署開放資料。</p>
+      <p style="font-size: 0.85em; color: var(--text-light);">免責聲明：本系統資料僅供參考，實際資訊請以健保署網站公告為準。</p>
+    </div>
     <p id="footerSync"></p>
   </footer>
 
