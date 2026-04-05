@@ -779,13 +779,22 @@ function formatDate(str) {
   const m = String(str).match(/(\d{4})(\d{2})(\d{2})/);
   return m ? `${m[1]}/${m[2]}/${m[3]}` : str;
 }
-// 民國年格式 YYY/MM/DD（西元年 -1911）
+// 民國年格式 YYY/MM/DD（資料已是民國年 YYYMMDD 格式）
 function formatDateYYY(str) {
   if (!str) return '';
-  const m = String(str).match(/(\d{4})(\d{2})(\d{2})/);
-  if (!m) return str;
-  const yyy = parseInt(m[1], 10) - 1911;
-  return `${yyy}/${m[2]}/${m[3]}`;
+  const s = String(str).trim();
+  // 可能是 7 位 YYYMMDD 或 8 位 YYYYMMDD (西元)
+  if (s.length === 7) {
+    // 民國年 7 碼：YYY MM DD
+    return `${s.slice(0,3)}/${s.slice(3,5)}/${s.slice(5,7)}`;
+  }
+  const m = s.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (m) {
+    // 西元年 8 碼，轉民國
+    const yyy = parseInt(m[1], 10) - 1911;
+    return `${yyy}/${m[2]}/${m[3]}`;
+  }
+  return str;
 }
 function dateProgress(start, end) {
   try {
