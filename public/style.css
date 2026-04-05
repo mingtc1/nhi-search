@@ -472,6 +472,7 @@ input, select, button { font-family: inherit; }
 /* ─── Clickable Field Tags ────────────────────── */
 .field-tag {
   display: inline-flex;
+  flex-direction: row-reverse; /* 文字在左，加號 SVG 在右 */
   align-items: center;
   gap: 4px;
   padding: 4px 10px;
@@ -482,7 +483,7 @@ input, select, button { font-family: inherit; }
   background: var(--bg);
   cursor: pointer;
   transition: all var(--transition);
-  max-width: 200px;
+  max-width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -764,35 +765,29 @@ input, select, button { font-family: inherit; }
 .btn-action.btn-action--ext { border-color: var(--primary); color: var(--primary-dark); }
 .btn-action.btn-action--ext:hover { background: rgba(8,145,178,.06); }
 
-/* 有效期間简潔樣式 */
-.detail-date-row {
+/* 有效期間 — 緊湊 inline 版 */
+.detail-section--compact {
   display: flex;
   align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
 }
-.detail-date-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.detail-date-label {
-  font-size: .75rem;
-  font-weight: 600;
+.detail-inline-label {
+  font-size: .78rem;
+  font-weight: 700;
   color: var(--text-muted);
+  white-space: nowrap;
   text-transform: uppercase;
   letter-spacing: .05em;
 }
-.detail-date-value {
-  font-size: 1rem;
+.detail-inline-value {
+  font-size: .95rem;
   font-weight: 600;
   color: var(--text);
   font-family: 'Figtree', monospace;
-}
-.detail-date-sep {
-  font-size: 1.2rem;
-  color: var(--text-light);
-  flex-shrink: 0;
 }
 
 /* ─── Tag Legend ─────────────────────────────── */

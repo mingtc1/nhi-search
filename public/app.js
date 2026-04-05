@@ -332,7 +332,7 @@ function createDrugCard(drug) {
 
 function tagBtn(field, value) {
   if (!value) return '';
-  return `<span class="field-tag" data-field="${esc(field)}" data-value="${esc(value)}">${svgPlus()}${esc(trunc(value, 16))}</span>`;
+  return `<span class="field-tag" data-field="${esc(field)}" data-value="${esc(value)}">${esc(trunc(value, 16))}${svgPlus()}</span>`;
 }
 
 // ─── 表格行 ──────────────────────────────────────────────────────
@@ -472,16 +472,16 @@ function buildDetailHTML(d) {
       </div>` : ''}
       ${d['藥品分類'] ? `<div class="detail-row">
         <span class="detail-row-label">藥品分類</span>
-        <span class="field-tag" data-field="藥品分類" data-value="${esc(d['藥品分類'])}">${svgPlus()}${esc(d['藥品分類'])}</span>
+        <span class="field-tag" data-field="藥品分類" data-value="${esc(d['藥品分類'])}">${esc(d['藥品分類'])}${svgPlus()}</span>
       </div>` : ''}
       ${d['分類分組名稱'] ? `<div class="detail-row">
         <span class="detail-row-label">分類分組</span>
-        <span class="field-tag" data-field="分類分組名稱" data-value="${esc(d['分類分組名稱'])}">${svgPlus()}${esc(d['分類分組名稱'])}</span>
+        <span class="field-tag" data-field="分類分組名稱" data-value="${esc(d['分類分組名稱'])}">${esc(d['分類分組名稱'])}${svgPlus()}</span>
       </div>` : ''}
       ${d['ATC代碼'] ? `<div class="detail-row">
         <span class="detail-row-label">ATC 代碼</span>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <span class="field-tag" data-field="ATC代碼" data-value="${esc(d['ATC代碼'])}">${svgPlus()}${esc(d['ATC代碼'])}</span>
+          <span class="field-tag" data-field="ATC代碼" data-value="${esc(d['ATC代碼'])}">${esc(d['ATC代碼'])}${svgPlus()}</span>
           <a class="btn-action btn-action--ext" href="https://atcddd.fhi.no/atc_ddd_index/?code=${encodeURIComponent(d['ATC代碼'])}&showdescription=no" target="_blank" rel="noopener">
             ${svgExternalLink()} ATC 分類查詢
           </a>
@@ -489,20 +489,10 @@ function buildDetailHTML(d) {
       </div>` : ''}
     </div>
 
-    <!-- 有效期間 -->
-    ${start || end ? `<div class="detail-section">
-      <div class="detail-section-title">有效期間</div>
-      <div class="detail-date-row">
-        <div class="detail-date-item">
-          <span class="detail-date-label">起日</span>
-          <span class="detail-date-value">${esc(formatDateYYY(start)) || '—'}</span>
-        </div>
-        <div class="detail-date-sep">→</div>
-        <div class="detail-date-item">
-          <span class="detail-date-label">迄日</span>
-          <span class="detail-date-value">${esc(formatDateYYY(end)) || '持續有效'}</span>
-        </div>
-      </div>
+    <!-- 有效期間 (緊湊 inline) -->
+    ${start || end ? `<div class="detail-section detail-section--compact">
+      <span class="detail-inline-label">有效期間</span>
+      <span class="detail-inline-value">${esc(formatDateYYY(start)) || '—'} → ${esc(formatDateYYY(end)) || '持續有效'}</span>
     </div>` : ''}
 
     <!-- 廠商與許可 -->
@@ -517,22 +507,23 @@ function buildDetailHTML(d) {
           <button class="copy-btn" onclick="copyText('${esc(licNo)}', this)">${svgCopy()} 複製</button>
         </div>
       </div>
-      <div class="action-buttons">
+      ` : ''}
+    </div>
+
+    <!-- EPI 適應症（非同步載入）+ 延伸按鈕 -->
+    ${licNo ? `<div class="detail-section" id="epiSection">
+      <div class="detail-section-title">適應症</div>
+      <div id="epiContent" class="epi-loading">
+        <div class="spinner spinner--sm"></div>
+        <span>載入中...</span>
+      </div>
+      <div class="action-buttons" style="margin-top:14px">
         <a class="btn-action btn-action--ext" href="https://epi.mingster.workers.dev/?q=${encodeURIComponent(licNo)}" target="_blank" rel="noopener">
           ${svgExternalLink()} 電子仿單資訊應用平台
         </a>
         <a class="btn-action btn-action--ext" href="https://mcp.fda.gov.tw/im_shape/${encodeURIComponent(licNo)}" target="_blank" rel="noopener">
           ${svgExternalLink()} 藥品外觀查詢
         </a>
-      </div>` : ''}
-    </div>
-
-    <!-- EPI 仿單資料（非同步載入） -->
-    ${licNo ? `<div class="detail-section" id="epiSection">
-      <div class="detail-section-title">電子仿單資訊</div>
-      <div id="epiContent" class="epi-loading">
-        <div class="spinner spinner--sm"></div>
-        <span>載入仿單資料中...</span>
       </div>
     </div>` : ''}
 
@@ -550,38 +541,33 @@ function buildDetailHTML(d) {
   `;
 }
 
-// ─── EPI API 非同步載入 ─────────────────────────────────────────────
+// ─── EPI API 非同步載入（只取適應症）────────────────────────────────
 async function loadEpiData(licNo) {
   const el = document.getElementById('epiContent');
   if (!el) return;
   try {
     const res = await fetch(
-      `https://epi.mingtc.com/api/v1/labels?licenseNo=${encodeURIComponent(licNo)}&sec=indication,storage,composition&format=json`
+      `https://epi.mingtc.com/api/v1/labels?licenseNo=${encodeURIComponent(licNo)}&sec=indication&format=json`
     );
     const data = await res.json();
     if (!data.success) throw new Error(data.error?.message || '查無資料');
 
-    const secs = data.data?.sections || {};
-    const rows = [
-      { key: 'indication',  label: '適應症' },
-      { key: 'storage',     label: '包裝及儲存' },
-      { key: 'composition', label: '性狀' },
-    ];
-
-    const html = rows.map(({ key, label }) => {
-      const text = secs[key]?.text;
-      if (!text) return '';
-      return `<div class="epi-block">
-        <div class="epi-block-label">${label}</div>
-        <div class="epi-block-text">${esc(text)}</div>
-      </div>`;
-    }).join('');
-
+    const text = data.data?.sections?.indication?.text || '';
     el.className = '';
-    el.innerHTML = html || '<p class="epi-none">此藥品無仿單資料</p>';
+    if (text) {
+      // 去掉行首數字標號（如 1. 2. (1) 等），並過濾空行
+      const cleaned = text
+        .split('\n')
+        .map(line => line.replace(/^\s*(\d+[.)、]|[（(]\d+[)）])\s*/, '').trim())
+        .filter(Boolean)
+        .join('\n');
+      el.innerHTML = `<div class="epi-block-text">${esc(cleaned)}</div>`;
+    } else {
+      el.innerHTML = '<p class="epi-none">此藥品無適應症資料</p>';
+    }
   } catch (err) {
     el.className = '';
-    el.innerHTML = `<p class="epi-none">仿單資料載入失敗：${esc(err.message)}</p>`;
+    el.innerHTML = `<p class="epi-none">資料載入失敗：${esc(err.message)}</p>`;
   }
 }
 
