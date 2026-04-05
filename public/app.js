@@ -267,6 +267,13 @@ function renderResults(append = false) {
   }
 }
 
+// ─── 英文名數字加粗斜體 ────────────────────────────────────────────
+function formatDrugNameEn(rawName) {
+  if (!rawName) return '';
+  // 先跳脫 HTML，再針對數字（含小數點、空格前後）加粗斜體
+  return esc(rawName).replace(/(\d[\d.,]*)/g, '<strong><em>$1</em></strong>');
+}
+
 // ─── 藥品卡片 ─────────────────────────────────────────────────────
 function createDrugCard(drug) {
   const card = document.createElement('div');
@@ -276,19 +283,22 @@ function createDrugCard(drug) {
   card.setAttribute('aria-label', `${drug['藥品中文名稱']}，詳細資訊`);
 
   const nameZh = esc(drug['藥品中文名稱'] || '');
-  const nameEn = esc(drug['藥品英文名稱'] || '');
+  const nameEnRaw = drug['藥品英文名稱'] || '';
+  const nameEnFormatted = formatDrugNameEn(nameEnRaw);
   const price = drug['支付價'] ? `＄ ${drug['支付價']}` : '—';
   const code = esc(drug['藥品代號'] || '');
 
   card.innerHTML = `
     <div class="drug-card-header">
-      <span class="drug-name-zh">${nameZh}</span>
+      <span class="drug-name-en-main">${nameEnFormatted || code}</span>
       <span class="drug-price">${price}</span>
     </div>
-    <div class="drug-name-en">${nameEn || code}</div>
+    <div class="drug-name-zh-sub">${nameZh}</div>
     <div class="drug-tags">
       ${tagBtn('劑型', drug['劑型'])}
       ${tagBtn('單複方', drug['單複方'])}
+      ${tagBtn('藥品分類', drug['藥品分類'])}
+      ${tagBtn('分類分組名稱', drug['分類分組名稱'])}
       ${tagBtn('ATC代碼', drug['ATC代碼'])}
       ${drug['成分'] ? `<span class="field-tag" data-field="成分" data-value="${esc(drug['成分'])}" title="${esc(drug['成分'])}">
         ${svgPlus()}
@@ -381,6 +391,11 @@ function openDetailPanel(drug) {
   resultsView.hidden = true;
   detailView.hidden = false;
   window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  // 非同步載入 EPI 仿單資料
+  if (drug['許可證字號']) {
+    loadEpiData(drug['許可證字號']);
+  }
 }
 
 function closeDetailPanel() {
@@ -397,7 +412,6 @@ function buildDetailHTML(d) {
       try {
         const u = new URL(url);
         const fn = u.searchParams.get('DurgFileName') || '';
-        // 擷取章節號碼：取第一段數字結構 (如 1.2.2.1.)
         const match = fn.match(/^([\d.]+)\./);
         const chapter = match ? match[1] : fn.split('_')[0] || '章節';
         return { url, chapter };
@@ -408,17 +422,16 @@ function buildDetailHTML(d) {
   };
 
   const chapters = parseChapters(d['給付規定章節連結']);
-
-  // 有效期間計算
   const start = d['有效起日'] || '';
   const end   = d['有效迄日'] || '';
+  const licNo = d['許可證字號'] || '';
 
   return `
     <!-- 核心資訊 -->
     <div class="detail-section">
       <div class="detail-core-header">
+        <div class="detail-name-en">${formatDrugNameEn(d['藥品英文名稱'] || '')}</div>
         <div class="detail-name-zh">${esc(d['藥品中文名稱'] || '')}</div>
-        <div class="detail-name-en">${esc(d['藥品英文名稱'] || '')}</div>
         <div class="detail-price-row">
           <div>
             <div class="detail-price-label">支付價格</div>
@@ -479,10 +492,16 @@ function buildDetailHTML(d) {
     <!-- 有效期間 -->
     ${start || end ? `<div class="detail-section">
       <div class="detail-section-title">有效期間</div>
-      <div class="date-range">
-        <span>${esc(formatDate(start))}</span>
-        <div class="date-range-bar"><div class="date-range-fill" style="width:${dateProgress(start,end)}%"></div></div>
-        <span>${esc(formatDate(end)) || '持續有效'}</span>
+      <div class="detail-date-row">
+        <div class="detail-date-item">
+          <span class="detail-date-label">起日</span>
+          <span class="detail-date-value">${esc(formatDateYYY(start)) || '—'}</span>
+        </div>
+        <div class="detail-date-sep">→</div>
+        <div class="detail-date-item">
+          <span class="detail-date-label">迄日</span>
+          <span class="detail-date-value">${esc(formatDateYYY(end)) || '持續有效'}</span>
+        </div>
       </div>
     </div>` : ''}
 
@@ -491,19 +510,31 @@ function buildDetailHTML(d) {
       <div class="detail-section-title">廠商與許可</div>
       ${d['藥商'] ? `<div class="detail-row"><span class="detail-row-label">藥商</span><span class="detail-row-value">${esc(d['藥商'])}</span></div>` : ''}
       ${d['製造廠名稱'] ? `<div class="detail-row"><span class="detail-row-label">製造廠</span><span class="detail-row-value">${esc(d['製造廠名稱'])}</span></div>` : ''}
-      ${d['許可證字號'] ? `<div class="detail-row">
+      ${licNo ? `<div class="detail-row">
         <span class="detail-row-label">許可字號</span>
         <div class="copy-wrap">
-          <span class="detail-row-value" style="font-family:monospace;font-size:.85rem">${esc(d['許可證字號'])}</span>
-          <button class="copy-btn" onclick="copyText('${esc(d['許可證字號'])}', this)">${svgCopy()} 複製</button>
+          <span class="detail-row-value" style="font-family:monospace;font-size:.85rem">${esc(licNo)}</span>
+          <button class="copy-btn" onclick="copyText('${esc(licNo)}', this)">${svgCopy()} 複製</button>
         </div>
       </div>
       <div class="action-buttons">
-        <a class="btn-action btn-action--ext" href="https://mcp.fda.gov.tw/im_detail_1/${encodeURIComponent(d['許可證字號'])}" target="_blank" rel="noopener">
-          ${svgExternalLink()} 電子仿單
+        <a class="btn-action btn-action--ext" href="https://epi.mingster.workers.dev/?q=${encodeURIComponent(licNo)}" target="_blank" rel="noopener">
+          ${svgExternalLink()} 電子仿單資訊應用平台
+        </a>
+        <a class="btn-action btn-action--ext" href="https://mcp.fda.gov.tw/im_shape/${encodeURIComponent(licNo)}" target="_blank" rel="noopener">
+          ${svgExternalLink()} 藥品外觀查詢
         </a>
       </div>` : ''}
     </div>
+
+    <!-- EPI 仿單資料（非同步載入） -->
+    ${licNo ? `<div class="detail-section" id="epiSection">
+      <div class="detail-section-title">電子仿單資訊</div>
+      <div id="epiContent" class="epi-loading">
+        <div class="spinner spinner--sm"></div>
+        <span>載入仿單資料中...</span>
+      </div>
+    </div>` : ''}
 
     <!-- 給付規定 -->
     ${chapters.length > 0 ? `<div class="detail-section">
@@ -517,6 +548,41 @@ function buildDetailHTML(d) {
       </div>
     </div>` : ''}
   `;
+}
+
+// ─── EPI API 非同步載入 ─────────────────────────────────────────────
+async function loadEpiData(licNo) {
+  const el = document.getElementById('epiContent');
+  if (!el) return;
+  try {
+    const res = await fetch(
+      `https://epi.mingtc.com/api/v1/labels?licenseNo=${encodeURIComponent(licNo)}&sec=indication,storage,composition&format=json`
+    );
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error?.message || '查無資料');
+
+    const secs = data.data?.sections || {};
+    const rows = [
+      { key: 'indication',  label: '適應症' },
+      { key: 'storage',     label: '包裝及儲存' },
+      { key: 'composition', label: '性狀' },
+    ];
+
+    const html = rows.map(({ key, label }) => {
+      const text = secs[key]?.text;
+      if (!text) return '';
+      return `<div class="epi-block">
+        <div class="epi-block-label">${label}</div>
+        <div class="epi-block-text">${esc(text)}</div>
+      </div>`;
+    }).join('');
+
+    el.className = '';
+    el.innerHTML = html || '<p class="epi-none">此藥品無仿單資料</p>';
+  } catch (err) {
+    el.className = '';
+    el.innerHTML = `<p class="epi-none">仿單資料載入失敗：${esc(err.message)}</p>`;
+  }
 }
 
 // ─── Tag 帶入篩選 ─────────────────────────────────────────────────
@@ -712,6 +778,14 @@ function formatDate(str) {
   if (!str) return '';
   const m = String(str).match(/(\d{4})(\d{2})(\d{2})/);
   return m ? `${m[1]}/${m[2]}/${m[3]}` : str;
+}
+// 民國年格式 YYY/MM/DD（西元年 -1911）
+function formatDateYYY(str) {
+  if (!str) return '';
+  const m = String(str).match(/(\d{4})(\d{2})(\d{2})/);
+  if (!m) return str;
+  const yyy = parseInt(m[1], 10) - 1911;
+  return `${yyy}/${m[2]}/${m[3]}`;
 }
 function dateProgress(start, end) {
   try {
