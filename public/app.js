@@ -59,9 +59,8 @@ const resultsTableWrap   = $('resultsTableWrap');
 const resultsTableBody   = $('resultsTableBody');
 const sentinel           = $('infiniteScrollSentinel');
 const loadMoreIndicator  = $('loadMoreIndicator');
-const detailOverlay      = $('detailOverlay');
-const detailPanel        = $('detailPanel');
-const detailTitle        = $('detailTitle');
+const resultsView        = $('resultsView');
+const detailView         = $('detailView');
 const detailBody         = $('detailBody');
 const detailClose        = $('detailClose');
 const viewCard           = $('viewCard');
@@ -369,36 +368,24 @@ function openDetailByCode(code, cachedDrug = null) {
 }
 
 function openDetailPanel(drug) {
-  detailTitle.textContent = drug['藥品中文名稱'] || '藥品詳情';
   detailBody.innerHTML = buildDetailHTML(drug);
 
   // 綁定 tag 點擊與成分加入按鈕
   detailBody.querySelectorAll('.field-tag[data-field], .filter-add-btn[data-field]').forEach(btn => {
     btn.addEventListener('click', () => {
       applyTagToFilter(btn.dataset.field, btn.dataset.value);
-      showToast(`已帶入「${btn.dataset.field}」篩選條件`);
     });
   });
 
   // 顯示
-  detailOverlay.hidden = false;
-  detailPanel.hidden = false;
-  requestAnimationFrame(() => {
-    detailOverlay.classList.add('visible');
-    detailPanel.classList.add('open');
-  });
-  document.body.style.overflow = 'hidden';
-  detailClose.focus();
+  resultsView.hidden = true;
+  detailView.hidden = false;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function closeDetailPanel() {
-  detailOverlay.classList.remove('visible');
-  detailPanel.classList.remove('open');
-  setTimeout(() => {
-    detailOverlay.hidden = true;
-    detailPanel.hidden = true;
-    document.body.style.overflow = '';
-  }, 250);
+  detailView.hidden = true;
+  resultsView.hidden = false;
 }
 
 // ─── 詳情 HTML 建構 ───────────────────────────────────────────────
@@ -559,8 +546,9 @@ function applyTagToFilter(field, value) {
       advancedFilters.classList.add('open');
       advancedToggle.setAttribute('aria-expanded', 'true');
     }
-    showToast(`已帶入「${field}」條件，按「搜尋」執行查詢`);
+    showToast(`已帶入「${field}」作為搜尋條件`);
     updateActiveFilterTags(collectQuery());
+    doSearch(true); // 自動在背景重搜
   }
 }
 
@@ -668,8 +656,9 @@ function setupEventListeners() {
     doSearch();
   });
   detailClose.addEventListener('click', closeDetailPanel);
-  detailOverlay.addEventListener('click', closeDetailPanel);
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDetailPanel(); });
+  document.addEventListener('keydown', e => { 
+    if (e.key === 'Escape' && !detailView.hidden) closeDetailPanel(); 
+  });
   viewCard.addEventListener('click', () => setViewMode('card'));
   viewTable.addEventListener('click', () => setViewMode('table'));
 

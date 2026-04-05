@@ -28,8 +28,8 @@
   <!-- ── 主要內容 ─────────────────────────────────── -->
   <main class="main-layout">
 
-    <!-- ── 搜尋面板（左側 / 頂部） ──────────────── -->
-    <aside class="search-panel">
+    <!-- ── 搜尋面板 (置頂) ──────────────── -->
+    <section class="search-panel">
       <!-- 主搜尋框 -->
       <div class="search-box">
         <label class="sr-only" for="searchInput">搜尋藥品</label>
@@ -40,7 +40,7 @@
           <input
             id="searchInput"
             type="search"
-            placeholder="輸入藥品名稱、成分、代號、許可字號..."
+            placeholder="輸入藥品名稱、成分、代號..."
             autocomplete="off"
             spellcheck="false"
           />
@@ -49,7 +49,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
-          <span>搜尋</span>
+          <span class="btn-text">搜尋</span>
         </button>
       </div>
 
@@ -89,6 +89,10 @@
               <label for="filterSubCategory">分類分組</label>
               <select id="filterSubCategory"><option value="">全部</option></select>
             </div>
+            <div class="filter-group">
+              <label for="filterATC">ATC 代碼</label>
+              <input id="filterATC" type="text" placeholder="如 J01CA04" />
+            </div>
             <div class="filter-group filter-group--full">
               <label>單複方</label>
               <div class="radio-group">
@@ -98,10 +102,6 @@
               </div>
             </div>
             <div class="filter-group filter-group--full">
-              <label for="filterATC">ATC 代碼</label>
-              <input id="filterATC" type="text" placeholder="如 J01CA04 或 J01..." />
-            </div>
-            <div class="filter-group">
               <label>支付價範圍（元）</label>
               <div class="price-range">
                 <input id="filterPriceMin" type="number" min="0" placeholder="最低" />
@@ -112,106 +112,109 @@
           </div>
         </div>
       </div>
-    </aside>
+    </section>
 
-    <!-- ── 結果區 ─────────────────────────────────── -->
-    <section class="results-area">
-      <!-- 結果統計 -->
-      <div class="results-meta" id="resultsMeta" hidden>
-        <span id="resultsCount"></span>
-        <div class="view-toggle" role="group" aria-label="顯示方式">
-          <button class="btn btn-sm btn-ghost" id="exportCsvBtn" style="margin-right: 8px;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;margin-right:4px;">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line>
-            </svg>匯出 CSV
-          </button>
-          <button class="view-btn active" id="viewCard" title="卡片視圖" aria-label="卡片視圖">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-              <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
-            </svg>
-          </button>
-          <button class="view-btn" id="viewTable" title="表格視圖" aria-label="表格視圖">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/>
-              <line x1="3" y1="18" x2="21" y2="18"/>
-            </svg>
-          </button>
+    <!-- ── 內容區 ─────────────────────────────────── -->
+    <section class="content-area">
+      <!-- 搜尋結果視圖 -->
+      <div id="resultsView">
+        <!-- 結果統計 -->
+        <div class="results-meta" id="resultsMeta" hidden>
+          <span id="resultsCount"></span>
+          <div class="view-toggle" role="group" aria-label="顯示方式">
+            <button class="btn btn-sm btn-ghost" id="exportCsvBtn" style="margin-right: 8px;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;margin-right:4px;">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>匯出 CSV
+            </button>
+            <button class="view-btn active" id="viewCard" title="卡片視圖" aria-label="卡片視圖">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+                <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+              </svg>
+            </button>
+            <button class="view-btn" id="viewTable" title="表格視圖" aria-label="表格視圖">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/>
+                <line x1="3" y1="18" x2="21" y2="18"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- 初始提示 -->
+        <div class="empty-state" id="emptyState">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <h2>開始搜尋健保藥品</h2>
+          <p>輸入藥品名稱、成分、許可字號，或使用進階篩選來縮小範圍。</p>
+        </div>
+
+        <!-- 載入中 -->
+        <div class="loading-state" id="loadingState" hidden>
+          <div class="spinner"></div>
+          <p>搜尋中...</p>
+        </div>
+
+        <!-- 無結果 -->
+        <div class="no-results" id="noResults" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            <line x1="8" y1="11" x2="14" y2="11"/>
+          </svg>
+          <h2>找不到符合條件的藥品</h2>
+          <ul>
+            <li>嘗試縮短搜尋字數或使用英文名稱</li>
+            <li>移除部分進階篩選條件</li>
+            <li>改搜尋成分名稱或 ATC 代碼</li>
+          </ul>
+        </div>
+
+        <!-- 卡片結果清單 -->
+        <div class="results-list" id="resultsList" hidden></div>
+
+        <!-- 表格結果 -->
+        <div class="results-table-wrap" id="resultsTableWrap" hidden>
+          <table class="results-table">
+            <thead>
+              <tr>
+                <th class="sortable" data-sort="藥品代號">藥品代號 <span class="sort-icon"></span></th>
+                <th class="sortable" data-sort="藥品中文名稱">藥品中文名稱 <span class="sort-icon"></span></th>
+                <th class="sortable" data-sort="成分">成分 <span class="sort-icon"></span></th>
+                <th class="sortable" data-sort="劑型">劑型 <span class="sort-icon"></span></th>
+                <th class="sortable" data-sort="ATC代碼">ATC 代碼 <span class="sort-icon"></span></th>
+                <th class="sortable" data-sort="支付價">支付價 <span class="sort-icon"></span></th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="resultsTableBody"></tbody>
+          </table>
+        </div>
+
+        <!-- 無限捲動觸發點 -->
+        <div id="infiniteScrollSentinel" style="height:1px"></div>
+        <div class="load-more-indicator" id="loadMoreIndicator" hidden>
+          <div class="spinner spinner--sm"></div>
+          <span>載入更多...</span>
         </div>
       </div>
 
-      <!-- 初始提示 -->
-      <div class="empty-state" id="emptyState">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-        </svg>
-        <h2>開始搜尋健保藥品</h2>
-        <p>輸入藥品名稱、成分、許可字號，或使用進階篩選來縮小範圍。</p>
-      </div>
-
-      <!-- 載入中 -->
-      <div class="loading-state" id="loadingState" hidden>
-        <div class="spinner"></div>
-        <p>搜尋中...</p>
-      </div>
-
-      <!-- 無結果 -->
-      <div class="no-results" id="noResults" hidden>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          <line x1="8" y1="11" x2="14" y2="11"/>
-        </svg>
-        <h2>找不到符合條件的藥品</h2>
-        <ul>
-          <li>嘗試縮短搜尋字數或使用英文名稱</li>
-          <li>移除部分進階篩選條件</li>
-          <li>改搜尋成分名稱或 ATC 代碼</li>
-        </ul>
-      </div>
-
-      <!-- 卡片結果清單 -->
-      <div class="results-list" id="resultsList" hidden></div>
-
-      <!-- 表格結果 -->
-      <div class="results-table-wrap" id="resultsTableWrap" hidden>
-        <table class="results-table">
-          <thead>
-            <tr>
-              <th class="sortable" data-sort="藥品代號">藥品代號 <span class="sort-icon"></span></th>
-              <th class="sortable" data-sort="藥品中文名稱">藥品中文名稱 <span class="sort-icon"></span></th>
-              <th class="sortable" data-sort="成分">成分 <span class="sort-icon"></span></th>
-              <th class="sortable" data-sort="劑型">劑型 <span class="sort-icon"></span></th>
-              <th class="sortable" data-sort="ATC代碼">ATC 代碼 <span class="sort-icon"></span></th>
-              <th class="sortable" data-sort="支付價">支付價 <span class="sort-icon"></span></th>
-              <th>詳細</th>
-            </tr>
-          </thead>
-          <tbody id="resultsTableBody"></tbody>
-        </table>
-      </div>
-
-      <!-- 無限捲動觸發點 -->
-      <div id="infiniteScrollSentinel" style="height:1px"></div>
-      <div class="load-more-indicator" id="loadMoreIndicator" hidden>
-        <div class="spinner spinner--sm"></div>
-        <span>載入更多...</span>
+      <!-- 藥品明細視圖 -->
+      <div id="detailView" class="detail-view" hidden>
+        <div class="detail-header-actions">
+          <button class="btn btn-ghost" id="detailClose" aria-label="返回搜尋結果">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+            </svg>
+            <span>返回搜尋結果</span>
+          </button>
+        </div>
+        
+        <div class="detail-body-main" id="detailBody"></div>
       </div>
     </section>
   </main>
-
-  <!-- ── 藥品詳情面板（Drawer / Bottom Sheet） ──── -->
-  <div class="detail-overlay" id="detailOverlay" hidden></div>
-  <aside class="detail-panel" id="detailPanel" role="dialog" aria-modal="true" aria-label="藥品詳情" hidden>
-    <div class="detail-header">
-      <button class="detail-close" id="detailClose" aria-label="關閉詳情">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
-      <h2 class="detail-title" id="detailTitle">藥品詳情</h2>
-    </div>
-    <div class="detail-body" id="detailBody"></div>
-  </aside>
 
   <!-- ── 頁尾 ─────────────────────────────────────── -->
   <footer class="site-footer">
