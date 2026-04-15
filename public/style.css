@@ -660,17 +660,15 @@ input, select, button { font-family: inherit; }
   padding: 20px;
 }
 .detail-section-title {
-  font-size: .85rem;
+  font-size: 1.15rem;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .07em;
-  color: var(--text-muted);
-  margin-bottom: 14px;
-  padding-bottom: 8px;
-  border-bottom: 1.5px solid var(--border-light);
+  color: var(--primary-dark);
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid var(--border-light);
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 .detail-core-header { margin-bottom: 18px; }
 .detail-name-en {

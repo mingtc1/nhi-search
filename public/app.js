@@ -470,18 +470,31 @@ function buildDetailHTML(d) {
           ).join('')}
         </div>
       </div>` : ''}
-      ${d['藥品分類'] ? `<div class="detail-row">
-        <span class="detail-row-label">藥品分類</span>
-        <span class="field-tag" data-field="藥品分類" data-value="${esc(d['藥品分類'])}">${esc(d['藥品分類'])}${svgPlus()}</span>
+      ${d['藥品分類'] ? `<div class="detail-row" style="flex-direction: column; gap: 4px;">
+        <span class="detail-row-label" style="margin-bottom: 2px;">藥品分類</span>
+        <div class="ingredient-list">
+          <div class="ingredient-item">
+            <div class="ingredient-text">${esc(d['藥品分類'])}</div>
+            <button class="filter-add-btn" data-field="藥品分類" data-value="${esc(d['藥品分類'])}" title="點擊帶入搜尋" aria-label="帶入 ${esc(d['藥品分類'])} 作為搜尋條件">${svgPlus()}</button>
+          </div>
+        </div>
       </div>` : ''}
-      ${d['分類分組名稱'] ? `<div class="detail-row">
-        <span class="detail-row-label">分類分組</span>
-        <span class="field-tag" data-field="分類分組名稱" data-value="${esc(d['分類分組名稱'])}">${esc(d['分類分組名稱'])}${svgPlus()}</span>
+      ${d['分類分組名稱'] ? `<div class="detail-row" style="flex-direction: column; gap: 4px;">
+        <span class="detail-row-label" style="margin-bottom: 2px;">分類分組</span>
+        <div class="ingredient-list">
+          <div class="ingredient-item">
+            <div class="ingredient-text">${esc(d['分類分組名稱'])}</div>
+            <button class="filter-add-btn" data-field="分類分組名稱" data-value="${esc(d['分類分組名稱'])}" title="點擊帶入搜尋" aria-label="帶入 ${esc(d['分類分組名稱'])} 作為搜尋條件">${svgPlus()}</button>
+          </div>
+        </div>
       </div>` : ''}
-      ${d['ATC代碼'] ? `<div class="detail-row">
-        <span class="detail-row-label">ATC 代碼</span>
+      ${d['ATC代碼'] ? `<div class="detail-row" style="flex-direction: column; gap: 4px;">
+        <span class="detail-row-label" style="margin-bottom: 2px;">ATC 代碼</span>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <span class="field-tag" data-field="ATC代碼" data-value="${esc(d['ATC代碼'])}">${esc(d['ATC代碼'])}${svgPlus()}</span>
+          <div class="ingredient-item" style="margin-bottom:0">
+            <div class="ingredient-text">${esc(d['ATC代碼'])}</div>
+            <button class="filter-add-btn" data-field="ATC代碼" data-value="${esc(d['ATC代碼'])}" title="點擊帶入搜尋" aria-label="帶入 ${esc(d['ATC代碼'])} 作為搜尋條件">${svgPlus()}</button>
+          </div>
           <a class="btn-action btn-action--ext" href="https://atcddd.fhi.no/atc_ddd_index/?code=${encodeURIComponent(d['ATC代碼'])}&showdescription=no" target="_blank" rel="noopener">
             ${svgExternalLink()} ATC 分類查詢
           </a>
@@ -489,15 +502,10 @@ function buildDetailHTML(d) {
       </div>` : ''}
     </div>
 
-    <!-- 有效期間 (緊湊 inline) -->
-    ${start || end ? `<div class="detail-section detail-section--compact">
-      <span class="detail-inline-label">有效期間</span>
-      <span class="detail-inline-value">${esc(formatDateYYY(start)) || '—'} → ${esc(formatDateYYY(end)) || '持續有效'}</span>
-    </div>` : ''}
-
     <!-- 廠商與許可 -->
     <div class="detail-section">
       <div class="detail-section-title">廠商與許可</div>
+      ${start || end ? `<div class="detail-row"><span class="detail-row-label">有效起訖</span><span class="detail-row-value" style="font-family:'Figtree', monospace; font-weight:600;">${esc(formatDateYYY(start)) || '—'} → ${esc(formatDateYYY(end)) || '持續有效'}</span></div>` : ''}
       ${d['藥商'] ? `<div class="detail-row"><span class="detail-row-label">藥商</span><span class="detail-row-value">${esc(d['藥商'])}</span></div>` : ''}
       ${d['製造廠名稱'] ? `<div class="detail-row"><span class="detail-row-label">製造廠</span><span class="detail-row-value">${esc(d['製造廠名稱'])}</span></div>` : ''}
       ${licNo ? `<div class="detail-row">
@@ -518,7 +526,7 @@ function buildDetailHTML(d) {
         <span>載入中...</span>
       </div>
       <div class="action-buttons" style="margin-top:14px">
-        <a class="btn-action btn-action--ext" href="https://epi.mingster.workers.dev/?q=${encodeURIComponent(licNo)}" target="_blank" rel="noopener">
+        <a class="btn-action btn-action--ext" href="https://epi.mingtc.com/?q=${encodeURIComponent(licNo)}" target="_blank" rel="noopener">
           ${svgExternalLink()} 電子仿單資訊應用平台
         </a>
         <a class="btn-action btn-action--ext" href="https://mcp.fda.gov.tw/im_shape/${encodeURIComponent(licNo)}" target="_blank" rel="noopener">
@@ -545,29 +553,47 @@ function buildDetailHTML(d) {
 async function loadEpiData(licNo) {
   const el = document.getElementById('epiContent');
   if (!el) return;
+  
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 秒 Timeout
+  
   try {
     const res = await fetch(
-      `https://epi.mingtc.com/api/v1/labels?licenseNo=${encodeURIComponent(licNo)}&sec=indication&format=json`
+      `https://epi.mingtc.com/api/v1/labels?licenseNo=${encodeURIComponent(licNo)}&sec=indication&format=json`,
+      { signal: controller.signal }
     );
+    clearTimeout(timeoutId);
+    
     const data = await res.json();
     if (!data.success) throw new Error(data.error?.message || '查無資料');
 
     const text = data.data?.sections?.indication?.text || '';
     el.className = '';
+    
     if (text) {
-      // 去掉行首數字標號（如 1. 2. (1) 等），並過濾空行
-      const cleaned = text
+      // 移除開頭可能獨立存在的標題（如 "2" 或 "適應症" 等）
+      let cleanedText = text.trim().replace(/^(?:[\d\s]*(?:2|二)\.?\s*|適應症\s*[:：]?\s*)/i, '');
+      
+      // 去掉行首數字標號（如 1. 2. (1) 等），並過濾冗餘的「適應症」單行與空行
+      const cleaned = cleanedText
         .split('\n')
         .map(line => line.replace(/^\s*(\d+[.)、]|[（(]\d+[)）])\s*/, '').trim())
-        .filter(Boolean)
+        .filter(line => line && !/^適應症\s*[:：]?$/i.test(line))
         .join('\n');
-      el.innerHTML = `<div class="epi-block-text">${esc(cleaned)}</div>`;
+        
+      el.innerHTML = cleaned ? `<div class="epi-block-text">${esc(cleaned)}</div>` : '<p class="epi-none">此藥品無適應症資料</p>';
     } else {
       el.innerHTML = '<p class="epi-none">此藥品無適應症資料</p>';
     }
   } catch (err) {
+    clearTimeout(timeoutId);
     el.className = '';
-    el.innerHTML = `<p class="epi-none">資料載入失敗：${esc(err.message)}</p>`;
+    // 若為 Timeout，顯示網路連線逾時
+    if (err.name === 'AbortError') {
+      el.innerHTML = `<p class="epi-none">伺服器回應過慢，載入適應症逾時。請稍後再試。</p>`;
+    } else {
+      el.innerHTML = `<p class="epi-none">資料載入失敗：${esc(err.message)}</p>`;
+    }
   }
 }
 
@@ -689,8 +715,8 @@ function setViewMode(mode) {
 
 // ─── 事件監聽 ─────────────────────────────────────────────────────
 function setupEventListeners() {
-  searchBtn.addEventListener('click', () => doSearch());
-  searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+  searchBtn.addEventListener('click', () => { if (!detailView.hidden) closeDetailPanel(); doSearch(); });
+  searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') { if (!detailView.hidden) closeDetailPanel(); doSearch(); } });
   advancedToggle.addEventListener('click', () => {
     const open = advancedFilters.classList.toggle('open');
     advancedToggle.setAttribute('aria-expanded', open);
