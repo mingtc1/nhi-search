@@ -1307,3 +1307,53 @@ input, select, button { font-family: inherit; }
   .sub-filter-bar { gap: 6px; }
 }
 
+/* ─── ATC Depth Selector ─────────────────────────────────── */
+.sub-atc-depth-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  white-space: nowrap;
+}
+.sub-atc-depth-label {
+  font-size: .75rem;
+  font-weight: 600;
+  color: #92400E;
+}
+.sub-atc-depth-select {
+  font-size: .75rem;
+  padding: 3px 8px;
+  border: 1px solid #F59E0B;
+  border-radius: 4px;
+  background: #FFFBEB;
+  color: #92400E;
+  cursor: pointer;
+  font-weight: 600;
+}
+.sub-atc-depth-select:focus {
+  outline: 2px solid #F59E0B;
+  outline-offset: 1px;
+}
+/* L4 警示列專用深度選擇器樣式 */
+.sub-warning-bar--l4 .sub-atc-depth-label { color: #C2410C; }
+.sub-warning-bar--l4 .sub-atc-depth-select {
+  border-color: #FB923C;
+  background: #FFF7ED;
+  color: #C2410C;
+}
+
+/* Tab 小字標註 */
+.sub-tab-label small {
+  display: block;
+  font-size: .65rem;
+  font-weight: 400;
+  opacity: .75;
+  margin-top: 1px;
+}
+.sub-tab-label b {
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+

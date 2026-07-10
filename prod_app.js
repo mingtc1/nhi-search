@@ -977,6 +977,8 @@ const subFilterForm     = document.getElementById('subFilterForm');
 const subFilterLicense  = document.getElementById('subFilterLicense');
 const subFilterClear    = document.getElementById('subFilterClear');
 const subFilterCount    = document.getElementById('subFilterCount');
+const subAtcDepthWrap   = document.getElementById('subAtcDepthWrap');
+const subAtcDepth       = document.getElementById('subAtcDepth');
 const compareModal      = document.getElementById('compareModal');
 const compareModalClose = document.getElementById('compareModalClose');
 const compareLoading    = document.getElementById('compareLoading');
@@ -989,12 +991,14 @@ async function openSubstituteModal(drugId) {
   subState.currentPage  = 1;
   subState.selectedIds  = new Set();
   subState.filters      = { drug_class: '', dosage_form: '', has_license: '' };
+  subState.atcDepth     = 5;
   updateSelectedCount();
 
   // 重置篩選器
   if (subFilterClass)   subFilterClass.value   = '';
   if (subFilterForm)    subFilterForm.value     = '';
   if (subFilterLicense) subFilterLicense.value  = '';
+  if (subAtcDepth)      subAtcDepth.value       = '5';
 
   // 重置 Tabs
   subTabs.querySelectorAll('.sub-tab').forEach(t => {
@@ -1014,7 +1018,8 @@ async function openSubstituteModal(drugId) {
 
   // 取得摘要數量
   try {
-    const summaryRes = await fetch(`${API_BASE}/substitutes/summary?drug_id=${encodeURIComponent(drugId)}`);
+    const summaryParams = new URLSearchParams({ drug_id: drugId, atc_depth: subState.atcDepth });
+    const summaryRes = await fetch(`${API_BASE}/substitutes/summary?${summaryParams}`);
     const summary    = await summaryRes.json();
     if (!summaryRes.ok) throw new Error(summary.error || '摘要載入失敗');
 
@@ -1056,6 +1061,8 @@ async function loadSubList() {
     page:     subState.currentPage,
     pageSize: subState.pageSize,
   });
+  // Level 4 傳入 ATC 深度
+  if (subState.currentLevel === 4) params.set('atc_depth', subState.atcDepth);
   if (subState.filters.drug_class)  params.set('drug_class',  subState.filters.drug_class);
   if (subState.filters.dosage_form) params.set('dosage_form', subState.filters.dosage_form);
   if (subState.filters.has_license !== '') params.set('has_license', subState.filters.has_license);
@@ -1173,10 +1180,15 @@ function updateSubPagination(total, page, pageSize) {
 
 // ─── 警示列 ─────────────────────────────────────────────────────
 function updateWarningBar() {
+  const isL4 = subState.currentLevel === 4;
   const warning = subState.levelWarnings[subState.currentLevel] || '';
   subWarningText.textContent = warning;
-  const isL4 = subState.currentLevel === 4;
   subWarningBar.className = `sub-warning-bar ${isL4 ? 'sub-warning-bar--l4' : ''}`;
+  // L4 專屬：顯示/隱藏 ATC 深度選擇器
+  if (subAtcDepthWrap) subAtcDepthWrap.hidden = !isL4;
+  // 更新 L4 Tab 的標籤，反映目前選擇的碼數
+  const l4Tab = subTabs.querySelector('[data-level="4"] .sub-tab-label');
+  if (l4Tab) l4Tab.innerHTML = `同ATC<b>${subState.atcDepth}</b>碼類別`;
 }
 
 // ─── 顯示狀態 ───────────────────────────────────────────────────
@@ -1281,6 +1293,24 @@ function renderCompareTable(target, candidates) {
     updateWarningBar();
     await loadSubList();
   });
+
+  // ATC 深度切換（Level 4 專屬）
+  if (subAtcDepth) {
+    subAtcDepth.addEventListener('change', async () => {
+      subState.atcDepth = parseInt(subAtcDepth.value);
+      subState.currentPage = 1;
+      updateWarningBar();
+      // 重新撤回摘要數量（L4 count 可能變小）
+      const summaryParams = new URLSearchParams({ drug_id: subState.targetDrugId, atc_depth: subState.atcDepth });
+      const summaryRes = await fetch(`${API_BASE}/substitutes/summary?${summaryParams}`).catch(() => null);
+      if (summaryRes?.ok) {
+        const summary = await summaryRes.json();
+        const el = document.getElementById('subCount4');
+        if (el) el.textContent = (summary.levels?.level4?.count ?? 0).toLocaleString();
+      }
+      await loadSubList();
+    });
+  }
 
   // 分頁按鈕
   subPrevPage.addEventListener('click', async () => {

@@ -267,7 +267,7 @@
           <span class="sub-tab-count" id="subCount1">—</span>
         </button>
         <button class="sub-tab" data-level="2" role="tab" aria-selected="false">
-          <span class="sub-tab-label">同成分同劑型</span>
+          <span class="sub-tab-label">同成分同劑型<small>異劑量</small></span>
           <span class="sub-tab-count" id="subCount2">—</span>
         </button>
         <button class="sub-tab" data-level="3" role="tab" aria-selected="false">
@@ -284,6 +284,15 @@
       <div class="sub-warning-bar" id="subWarningBar">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
         <span id="subWarningText"></span>
+        <!-- ATC 深度選擇器（僅 Level 4 顯示） -->
+        <div class="sub-atc-depth-wrap" id="subAtcDepthWrap" hidden>
+          <label class="sub-atc-depth-label" for="subAtcDepth">ATC 比對碼數：</label>
+          <select id="subAtcDepth" class="sub-atc-depth-select" aria-label="ATC比對碼數">
+            <option value="5" selected>前5碼（預設）</option>
+            <option value="4">前4碼（擴大）</option>
+            <option value="3">前3碼（更大範圍）</option>
+          </select>
+        </div>
       </div>
 
       <!-- 篩選列 -->
