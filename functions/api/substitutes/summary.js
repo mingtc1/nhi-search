@@ -1,14 +1,18 @@
 /**
  * GET /api/substitutes/summary?drug_id=XXXX&atc_depth=5
  *
- * ── Level 定義（不重疊設計，以 ATC 7 碼辨識成分）──────────────────
- * L1: 同「分類分組名稱」（健保官方同組，含同成分/同劑型/同劑量）
- * L2: ATC 完整 7 碼相同 + 同劑型 + 排除 L1（等於：同成分同劑型，但不同劑量）
- * L3: ATC 完整 7 碼相同 + 不同劑型 + 排除 L1（等於：同成分，不同劑型）
- * L4: ATC 前 N 碼相同但 7 碼不同 + 排除 L1（等於：不同成分，同藥理分類）
+ * ── Level 定義（以分類分組名稱解析為核心）─────────────────────────
  *
- * 注意：「成分」欄位在健保資料庫中包含劑量（如 "DIAZEPAM 5 MG"），
- *       故不可用字串比對來判斷「同成分」，改用 ATC 7 碼作為成分識別子。
+ * 健保「分類分組名稱」格式：「成分，標準化劑型，劑量」
+ * 例：DIAZEPAM，一般錠劑膠囊劑，5.00 MG
+ *
+ * L1: 分類分組名稱完全相同（同成分＋同標準化劑型＋同劑量）
+ * L2: 成分＋標準化劑型相同，但劑量不同（LIKE '成分，劑型，%'，排除 L1）
+ * L3: 成分相同，標準化劑型不同（LIKE '成分，%'，排除 L1 與 L2 的劑型前綴）
+ * L4: ATC 前 N 碼相同但 7 碼不同（不同成分，同藥理類別）
+ *
+ * 優點：用分類分組的標準化劑型，錠劑與膠囊劑同屬「一般錠劑膠囊劑」，
+ *       比直接比對「劑型」欄位更符合臨床替代邏輯。
  */
 
 const CORS = {
@@ -22,9 +26,9 @@ function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: CORS });
 }
 
-/** 排除 L1 的通用片段（分類分組名稱不同） */
-function excludeL1Clause() {
-  return `("分類分組名稱" IS NULL OR "分類分組名稱" = '' OR "分類分組名稱" != ?)`;
+/** 轉義 LIKE 查詢中的特殊字元（%, _, \） */
+function escapeLike(str) {
+  return str.replace(/[\\%_]/g, '\\$&');
 }
 
 export async function onRequestOptions() {
@@ -48,15 +52,28 @@ export async function onRequestGet({ request, env }) {
     if (!target) return json({ error: `找不到藥品代號 ${drug_id}` }, 404);
 
     const groupName = target['分類分組名稱'] || '';
-    const form      = target['劑型'] || '';
     const atc       = (target['ATC代碼'] || '').trim();
-    const atcFull   = atc;                        // 完整 7 碼（識別同成分）
-    const atcPrefix = atc.slice(0, atc_depth);    // 前 N 碼（識別同藥理類別）
+    const atcFull   = atc;
+    const atcPrefix = atc.slice(0, atc_depth);
+
+    // ── 解析分類分組名稱三段結構 ──────────────────────────────────
+    // 格式：「成分，標準化劑型，劑量」（以全形逗號「，」分隔）
+    const groupParts          = groupName.split('，');
+    const groupIngredient     = groupParts[0] || '';   // e.g., "DIAZEPAM"
+    const groupStdForm        = groupParts.length >= 2 ? groupParts[1] : '';  // e.g., "一般錠劑膠囊劑"
+
+    // LIKE 前綴（已轉義特殊字元）
+    const ingredientFormPrefix = (groupIngredient && groupStdForm)
+      ? `${escapeLike(groupIngredient)}，${escapeLike(groupStdForm)}，`
+      : '';
+    const ingredientPrefix = groupIngredient
+      ? `${escapeLike(groupIngredient)}，`
+      : '';
 
     // ── 2. 各 Level 候選數量 ────────────────────────────────────
     const [l1Row, l2Row, l3Row, l4Row] = await Promise.all([
 
-      // L1: 同分類分組名稱（排除自身）
+      // L1: 分類分組名稱完全相同（排除自身）
       groupName
         ? env.DB.prepare(
             `SELECT COUNT(*) AS c FROM nhi_drugs
@@ -64,37 +81,36 @@ export async function onRequestGet({ request, env }) {
           ).bind(groupName, drug_id).first()
         : Promise.resolve({ c: 0 }),
 
-      // L2: ATC 7 碼相同 + 同劑型 + 排除 L1
-      (atcFull && form)
+      // L2: 同成分＋同標準化劑型，不同劑量
+      // LIKE '成分，劑型，%' 且分類分組名稱不等於原藥（排除 L1）
+      ingredientFormPrefix
         ? env.DB.prepare(
             `SELECT COUNT(*) AS c FROM nhi_drugs
-             WHERE "ATC代碼" = ?
-               AND "劑型" = ?
-               AND "藥品代號" != ?
-               AND ${excludeL1Clause()}`
-          ).bind(atcFull, form, drug_id, groupName).first()
+             WHERE "分類分組名稱" LIKE ? ESCAPE '\\'
+               AND "分類分組名稱" != ?
+               AND "藥品代號" != ?`
+          ).bind(`${ingredientFormPrefix}%`, groupName, drug_id).first()
         : Promise.resolve({ c: 0 }),
 
-      // L3: ATC 7 碼相同 + 不同劑型 + 排除 L1
-      atcFull
+      // L3: 同成分，不同標準化劑型
+      // LIKE '成分，%' 且 NOT LIKE '成分，劑型，%'（自然排除 L1 與 L2）
+      ingredientPrefix
         ? env.DB.prepare(
             `SELECT COUNT(*) AS c FROM nhi_drugs
-             WHERE "ATC代碼" = ?
-               AND "劑型" != ?
-               AND "藥品代號" != ?
-               AND ${excludeL1Clause()}`
-          ).bind(atcFull, form, drug_id, groupName).first()
+             WHERE "分類分組名稱" LIKE ? ESCAPE '\\'
+               AND "分類分組名稱" NOT LIKE ? ESCAPE '\\'
+               AND "藥品代號" != ?`
+          ).bind(`${ingredientPrefix}%`, `${ingredientFormPrefix || escapeLike(groupName) + '__'}%`, drug_id).first()
         : Promise.resolve({ c: 0 }),
 
-      // L4: ATC 前 N 碼相同但 7 碼不同（不同成分）+ 排除 L1
+      // L4: ATC 前 N 碼相同但 7 碼不同（不同成分，同藥理類別）
       atcPrefix
         ? env.DB.prepare(
             `SELECT COUNT(*) AS c FROM nhi_drugs
              WHERE "ATC代碼" LIKE ?
                AND "ATC代碼" != ?
-               AND "藥品代號" != ?
-               AND ${excludeL1Clause()}`
-          ).bind(`${atcPrefix}%`, atcFull, drug_id, groupName).first()
+               AND "藥品代號" != ?`
+          ).bind(`${atcPrefix}%`, atcFull, drug_id).first()
         : Promise.resolve({ c: 0 }),
     ]);
 
@@ -104,35 +120,41 @@ export async function onRequestGet({ request, env }) {
       target,
       levels: {
         level1: {
-          count: l1Row?.c ?? 0,
-          label: '健保同分組候選',
-          definition: '同「分類分組名稱」（健保官方同組，通常含同成分、同劑型、同劑量）',
-          warning: '依健保分類分組產生，請確認適應症、給付條件與院內供應狀態。',
+          count:      l1Row?.c ?? 0,
+          label:      '健保同分組候選',
+          definition: `分類分組名稱完全相同：${groupName || '（無資料）'}`,
+          warning:    '依健保分類分組產生，請確認適應症、給付條件與院內供應狀態。',
         },
         level2: {
-          count: l2Row?.c ?? 0,
-          label: '同成分同劑型異劑量候選',
-          definition: `ATC ${atcFull ? atcFull : '—'} 相同，劑型相同，劑量不同；已排除 Level 1`,
-          warning: '含量規格不同，使用前請確認劑量換算與給付條件。',
+          count:      l2Row?.c ?? 0,
+          label:      '同成分同劑型異劑量候選',
+          definition: ingredientFormPrefix
+            ? `分類分組前綴「${groupIngredient}，${groupStdForm}，」相同，但劑量不同`
+            : '（原藥品分類分組名稱格式不符，無法解析）',
+          warning:    '含量規格不同，使用前請確認劑量換算與給付條件。',
         },
         level3: {
-          count: l3Row?.c ?? 0,
-          label: '同成分異劑型候選',
-          definition: `ATC ${atcFull ? atcFull : '—'} 相同，劑型不同；已排除 Level 1`,
-          warning: '劑型不同，請確認給藥途徑、釋放特性與臨床可替代性。',
+          count:      l3Row?.c ?? 0,
+          label:      '同成分異劑型候選',
+          definition: ingredientPrefix
+            ? `分類分組成分「${groupIngredient}」相同，但標準化劑型「${groupStdForm}」不同`
+            : '（原藥品分類分組名稱格式不符，無法解析）',
+          warning:    '劑型不同，請確認給藥途徑、釋放特性與臨床可替代性。',
         },
         level4: {
-          count: l4Row?.c ?? 0,
-          label: `同ATC${atc_depth}碼類別候選`,
-          definition: `ATC 前 ${atc_depth} 碼（${atcPrefix || '—'}）相同，但活性成分不同；已排除 Level 1`,
-          warning: '不同成分，僅供治療替代參考。請重新評估適應症、劑量、禁忌、交互作用與健保給付條件。',
+          count:      l4Row?.c ?? 0,
+          label:      `同ATC${atc_depth}碼類別候選`,
+          definition: `ATC 前 ${atc_depth} 碼（${atcPrefix || '—'}）相同，但活性成分不同`,
+          warning:    '不同成分，僅供治療替代參考。請重新評估適應症、劑量、禁忌、交互作用與健保給付條件。',
           atc_depth,
         },
       },
       meta: {
-        has_group_name: !!groupName,
-        has_atc: !!atc,
-        atc_full: atcFull,
+        has_group_name:    !!groupName,
+        group_ingredient:  groupIngredient,
+        group_std_form:    groupStdForm,
+        has_atc:           !!atc,
+        atc_full:          atcFull,
         atc_depth,
         api_response_time_ms: responseMs,
       }
