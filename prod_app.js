@@ -71,6 +71,10 @@ const toastContainer     = $('toastContainer');
 
 // ─── 初始化 ────────────────────────────────────────────────────────
 async function init() {
+  // 優先偵測與寫入 Pro Mode 授權狀態（避免後續 URL 被清除）
+  if (typeof isProMode === 'function') {
+    isProMode();
+  }
   await loadOptions();
   loadSyncInfo();
   readUrlAndSearch();
