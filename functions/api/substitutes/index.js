@@ -1,15 +1,14 @@
 /**
  * GET /api/substitutes?drug_id=XXXX&level=1&page=1&pageSize=20&atc_depth=5
  *
- * ── Level 定義（不重複設計）──────────────────────────────────────
- * L1: 同「分類分組名稱」
- * L2: 同成分 + 同劑型 + 不同規格量，排除 L1
- * L3: 同成分 + 不同劑型，排除 L1
- * L4: 同 ATC 前 N 碼（預設5，可選3~5）+ 不同成分，排除 L1
+ * ── Level 定義（不重疊，以 ATC 7 碼辨識成分）──────────────────────
+ * L1: 同「分類分組名稱」（健保官方同組）
+ * L2: ATC 完整 7 碼相同 + 同劑型 + 排除 L1（同成分同劑型，不同劑量）
+ * L3: ATC 完整 7 碼相同 + 不同劑型 + 排除 L1（同成分，不同劑型）
+ * L4: ATC 前 N 碼相同且 7 碼不同 + 排除 L1（不同成分，同藥理類別）
  *
- * 支援其他參數：
- *   page, pageSize, drug_class, dosage_form, has_license,
- *   has_reimbursement, sort, order, atc_depth（L4 專用，預設5）
+ * 注意：健保「成分」欄位含劑量字串（如 "DIAZEPAM 5 MG"），
+ *       故以 ATC 7 碼作為「同成分」識別子。
  */
 
 const CORS = {
@@ -27,17 +26,17 @@ const LEVEL_META = {
   },
   2: {
     label: '同成分同劑型異劑量候選',
-    reason: '成分與劑型相同，但規格量不同',
+    reason: 'ATC 成分代碼相同，劑型相同，劑量不同',
     warning: '含量規格不同，使用前請確認劑量換算與給付條件。',
   },
   3: {
     label: '同成分異劑型候選',
-    reason: '成分相同，但劑型不同',
+    reason: 'ATC 成分代碼相同，但劑型不同',
     warning: '劑型不同，請確認給藥途徑、釋放特性與臨床可替代性。',
   },
   4: {
     label: '同ATC類別候選',
-    reason: '同ATC藥理分類，不同成分',
+    reason: '同ATC藥理分類，不同活性成分',
     warning: '不同成分，僅供治療替代參考。請重新評估適應症、劑量、禁忌、交互作用與健保給付條件。',
   },
 };
@@ -50,7 +49,7 @@ function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: CORS });
 }
 
-/** 將排除 L1 的條件抽成通用 SQL 片段 */
+/** 排除 L1 的通用 SQL 片段（分類分組名稱不同） */
 function excludeL1Clause() {
   return `("分類分組名稱" IS NULL OR "分類分組名稱" = '' OR "分類分組名稱" != ?)`;
 }
@@ -90,19 +89,17 @@ export async function onRequestGet({ request, env }) {
 
     if (!target) return json({ error: `找不到藥品代號 ${drug_id}` }, 404);
 
-    const groupName  = target['分類分組名稱'] || '';
-    const ingredient = target['成分'] || '';
-    const form       = target['劑型'] || '';
-    const dosage     = target['規格量'] || '';
-    const atc        = target['ATC代碼'] || '';
-    const atcPrefix  = atc.slice(0, atc_depth);
+    const groupName = target['分類分組名稱'] || '';
+    const form      = target['劑型'] || '';
+    const atc       = (target['ATC代碼'] || '').trim();
+    const atcFull   = atc;                        // 完整 7 碼，代表同成分
+    const atcPrefix = atc.slice(0, atc_depth);    // 前 N 碼，代表同藥理類別
 
     // ── 建構各 Level 的核心 WHERE 條件 ────────────────────────────
     let coreWhere = '';
     const coreParams = [];
 
     if (level === 1) {
-      // L1: 同分類分組名稱（排除自身）
       if (!groupName) {
         return json({
           level, page, pageSize, total: 0, items: [],
@@ -113,31 +110,31 @@ export async function onRequestGet({ request, env }) {
       coreParams.push(groupName, drug_id);
 
     } else if (level === 2) {
-      // L2: 同成分 + 同劑型 + 不同規格量，排除 L1
-      if (!ingredient || !form) {
-        return json({ level, page, pageSize, total: 0, items: [], warning: '原藥品缺少成分或劑型資料' });
+      // L2: ATC 7 碼相同 + 同劑型 + 排除 L1
+      if (!atcFull || !form) {
+        return json({ level, page, pageSize, total: 0, items: [], warning: '原藥品缺少 ATC 代碼或劑型資料' });
       }
-      coreWhere = `"成分" = ? AND "劑型" = ? AND "規格量" != ? AND "藥品代號" != ? AND ${excludeL1Clause()}`;
-      coreParams.push(ingredient, form, dosage, drug_id, groupName);
+      coreWhere = `"ATC代碼" = ? AND "劑型" = ? AND "藥品代號" != ? AND ${excludeL1Clause()}`;
+      coreParams.push(atcFull, form, drug_id, groupName);
 
     } else if (level === 3) {
-      // L3: 同成分 + 不同劑型，排除 L1
-      if (!ingredient) {
-        return json({ level, page, pageSize, total: 0, items: [], warning: '原藥品缺少成分資料' });
+      // L3: ATC 7 碼相同 + 不同劑型 + 排除 L1
+      if (!atcFull) {
+        return json({ level, page, pageSize, total: 0, items: [], warning: '原藥品缺少 ATC 代碼資料' });
       }
-      coreWhere = `"成分" = ? AND "劑型" != ? AND "藥品代號" != ? AND ${excludeL1Clause()}`;
-      coreParams.push(ingredient, form, drug_id, groupName);
+      coreWhere = `"ATC代碼" = ? AND "劑型" != ? AND "藥品代號" != ? AND ${excludeL1Clause()}`;
+      coreParams.push(atcFull, form, drug_id, groupName);
 
     } else if (level === 4) {
-      // L4: 同 ATC 前 N 碼 + 不同成分，排除 L1
+      // L4: ATC 前 N 碼相同但 7 碼不同（不同成分）+ 排除 L1
       if (!atcPrefix) {
         return json({
           level, page, pageSize, total: 0, items: [],
           warning: '原藥品無 ATC 代碼資料，無法搜尋 Level 4 候選',
         });
       }
-      coreWhere = `"ATC代碼" LIKE ? AND "成分" != ? AND "藥品代號" != ? AND ${excludeL1Clause()}`;
-      coreParams.push(`${atcPrefix}%`, ingredient, drug_id, groupName);
+      coreWhere = `"ATC代碼" LIKE ? AND "ATC代碼" != ? AND "藥品代號" != ? AND ${excludeL1Clause()}`;
+      coreParams.push(`${atcPrefix}%`, atcFull, drug_id, groupName);
     }
 
     // ── 附加篩選條件 ─────────────────────────────────────────────
@@ -188,7 +185,7 @@ export async function onRequestGet({ request, env }) {
     const meta  = { ...LEVEL_META[level] };
     if (level === 4) {
       meta.label  = `同ATC${atc_depth}碼類別候選`;
-      meta.reason = `ATC 代碼前 ${atc_depth} 碼相同，不同成分`;
+      meta.reason = `ATC 代碼前 ${atc_depth} 碼（${atcPrefix}）相同，活性成分不同`;
     }
 
     // ── 組裝結果 ─────────────────────────────────────────────────
@@ -207,7 +204,6 @@ export async function onRequestGet({ request, env }) {
       total,
       has_more: offset + items.length < total,
       items,
-      // 提供回應資訊供前端顯示
       level_meta: meta,
       atc_depth: level === 4 ? atc_depth : undefined,
     });
