@@ -3,16 +3,13 @@
  *
  * ── Level 定義（以分類分組名稱解析為核心）─────────────────────────
  *
- * 健保「分類分組名稱」格式：「成分，標準化劑型，劑量」
- * 例：DIAZEPAM，一般錠劑膠囊劑，5.00 MG
+ * 健保「分類分組名稱」格式：「成分 , 標準化劑型 , 劑量」 (逗號與空格可能混用，如半形或全形逗號)
+ * 例：DIAZEPAM , 一般錠劑膠囊劑 , 5.00 MG
  *
  * L1: 分類分組名稱完全相同（同成分＋同標準化劑型＋同劑量）
- * L2: 成分＋標準化劑型相同，但劑量不同（LIKE '成分，劑型，%'，排除 L1）
- * L3: 成分相同，標準化劑型不同（LIKE '成分，%'，排除 L1 與 L2 的劑型前綴）
+ * L2: 成分＋標準化劑型相同，但劑量不同（排除 L1）
+ * L3: 成分相同，標準化劑型不同（排除 L1 與 L2）
  * L4: ATC 前 N 碼相同但 7 碼不同（不同成分，同藥理類別）
- *
- * 優點：用分類分組的標準化劑型，錠劑與膠囊劑同屬「一般錠劑膠囊劑」，
- *       比直接比對「劑型」欄位更符合臨床替代邏輯。
  */
 
 const CORS = {
@@ -56,19 +53,11 @@ export async function onRequestGet({ request, env }) {
     const atcFull   = atc;
     const atcPrefix = atc.slice(0, atc_depth);
 
-    // ── 解析分類分組名稱三段結構 ──────────────────────────────────
-    // 格式：「成分，標準化劑型，劑量」（以全形逗號「，」分隔）
-    const groupParts          = groupName.split('，');
-    const groupIngredient     = groupParts[0] || '';   // e.g., "DIAZEPAM"
-    const groupStdForm        = groupParts.length >= 2 ? groupParts[1] : '';  // e.g., "一般錠劑膠囊劑"
-
-    // LIKE 前綴（已轉義特殊字元）
-    const ingredientFormPrefix = (groupIngredient && groupStdForm)
-      ? `${escapeLike(groupIngredient)}，${escapeLike(groupStdForm)}，`
-      : '';
-    const ingredientPrefix = groupIngredient
-      ? `${escapeLike(groupIngredient)}，`
-      : '';
+    // ── 解析分類分組名稱結構 ──────────────────────────────────
+    // 支援半形或全形逗號分隔，並自動 trim 除去前後空格
+    const groupParts      = groupName.split(/[，,]/).map(s => s.trim());
+    const groupIngredient = groupParts[0] || '';
+    const groupStdForm    = groupParts.length >= 2 ? groupParts[1] : '';
 
     // ── 2. 各 Level 候選數量 ────────────────────────────────────
     const [l1Row, l2Row, l3Row, l4Row] = await Promise.all([
@@ -82,25 +71,26 @@ export async function onRequestGet({ request, env }) {
         : Promise.resolve({ c: 0 }),
 
       // L2: 同成分＋同標準化劑型，不同劑量
-      // LIKE '成分，劑型，%' 且分類分組名稱不等於原藥（排除 L1）
-      ingredientFormPrefix
+      // LIKE '成分%' AND LIKE '%劑型%' 且排除 L1
+      (groupIngredient && groupStdForm)
         ? env.DB.prepare(
             `SELECT COUNT(*) AS c FROM nhi_drugs
              WHERE "分類分組名稱" LIKE ? ESCAPE '\\'
+               AND "分類分組名稱" LIKE ? ESCAPE '\\'
                AND "分類分組名稱" != ?
                AND "藥品代號" != ?`
-          ).bind(`${ingredientFormPrefix}%`, groupName, drug_id).first()
+          ).bind(`${escapeLike(groupIngredient)}%`, `%${escapeLike(groupStdForm)}%`, groupName, drug_id).first()
         : Promise.resolve({ c: 0 }),
 
       // L3: 同成分，不同標準化劑型
-      // LIKE '成分，%' 且 NOT LIKE '成分，劑型，%'（自然排除 L1 與 L2）
-      ingredientPrefix
+      // LIKE '成分%' AND NOT LIKE '%劑型%'
+      groupIngredient
         ? env.DB.prepare(
             `SELECT COUNT(*) AS c FROM nhi_drugs
              WHERE "分類分組名稱" LIKE ? ESCAPE '\\'
                AND "分類分組名稱" NOT LIKE ? ESCAPE '\\'
                AND "藥品代號" != ?`
-          ).bind(`${ingredientPrefix}%`, `${ingredientFormPrefix || escapeLike(groupName) + '__'}%`, drug_id).first()
+          ).bind(`${escapeLike(groupIngredient)}%`, `%${escapeLike(groupStdForm)}%`, drug_id).first()
         : Promise.resolve({ c: 0 }),
 
       // L4: ATC 前 N 碼相同但 7 碼不同（不同成分，同藥理類別）
@@ -128,16 +118,16 @@ export async function onRequestGet({ request, env }) {
         level2: {
           count:      l2Row?.c ?? 0,
           label:      '同成分同劑型異劑量候選',
-          definition: ingredientFormPrefix
-            ? `分類分組前綴「${groupIngredient}，${groupStdForm}，」相同，但劑量不同`
+          definition: (groupIngredient && groupStdForm)
+            ? `同成分（${groupIngredient}）與同劑型類別（${groupStdForm}），但規格劑量不同；已排除 Level 1`
             : '（原藥品分類分組名稱格式不符，無法解析）',
           warning:    '含量規格不同，使用前請確認劑量換算與給付條件。',
         },
         level3: {
           count:      l3Row?.c ?? 0,
           label:      '同成分異劑型候選',
-          definition: ingredientPrefix
-            ? `分類分組成分「${groupIngredient}」相同，但標準化劑型「${groupStdForm}」不同`
+          definition: groupIngredient
+            ? `同成分（${groupIngredient}），但劑型類別非（${groupStdForm || '—'}）；已排除 Level 1`
             : '（原藥品分類分組名稱格式不符，無法解析）',
           warning:    '劑型不同，請確認給藥途徑、釋放特性與臨床可替代性。',
         },

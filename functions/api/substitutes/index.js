@@ -3,12 +3,12 @@
  *
  * ── Level 定義（以分類分組名稱解析為核心）─────────────────────────
  *
- * 健保「分類分組名稱」格式：「成分，標準化劑型，劑量」
- * 例：DIAZEPAM，一般錠劑膠囊劑，5.00 MG
+ * 健保「分類分組名稱」格式：「成分 , 標準化劑型 , 劑量」 (逗號與空格可能混用，如半形或全形逗號)
+ * 例：DIAZEPAM , 一般錠劑膠囊劑 , 5.00 MG
  *
  * L1: 分類分組名稱完全相同（同成分＋同標準化劑型＋同劑量）
- * L2: 成分＋標準化劑型相同，劑量不同（LIKE '成分，劑型，%'，排除 L1）
- * L3: 成分相同，標準化劑型不同（LIKE '成分，%' 且 NOT LIKE '成分，劑型，%'）
+ * L2: 成分＋標準化劑型相同，但劑量不同（LIKE '成分%' AND LIKE '%劑型%'，排除 L1）
+ * L3: 成分相同，標準化劑型不同（LIKE '成分%' AND NOT LIKE '%劑型%'）
  * L4: ATC 前 N 碼相同但 7 碼不同（不同成分，同藥理類別）
  */
 
@@ -95,18 +95,10 @@ export async function onRequestGet({ request, env }) {
     const atcFull   = atc;
     const atcPrefix = atc.slice(0, atc_depth);
 
-    // ── 解析分類分組名稱三段結構 ──────────────────────────────────
-    // 格式：「成分，標準化劑型，劑量」（全形逗號「，」分隔）
-    const groupParts      = groupName.split('，');
+    // ── 解析分類分組名稱結構 ──────────────────────────────────
+    const groupParts      = groupName.split(/[，,]/).map(s => s.trim());
     const groupIngredient = groupParts[0] || '';
     const groupStdForm    = groupParts.length >= 2 ? groupParts[1] : '';
-
-    const ingredientFormPrefix = (groupIngredient && groupStdForm)
-      ? `${escapeLike(groupIngredient)}，${escapeLike(groupStdForm)}，`
-      : '';
-    const ingredientPrefix = groupIngredient
-      ? `${escapeLike(groupIngredient)}，`
-      : '';
 
     // ── 建構各 Level 的核心 WHERE 條件 ────────────────────────────
     let coreWhere = '';
@@ -121,23 +113,22 @@ export async function onRequestGet({ request, env }) {
       coreParams.push(groupName, drug_id);
 
     } else if (level === 2) {
-      if (!ingredientFormPrefix) {
+      if (!groupIngredient || !groupStdForm) {
         return json({ level, page, pageSize, total: 0, items: [],
           warning: '原藥品分類分組名稱格式不符（需含成分與標準化劑型），無法搜尋 Level 2' });
       }
-      // LIKE '成分，劑型，%' 且 != groupName（排除 L1）
-      coreWhere = `"分類分組名稱" LIKE ? ESCAPE '\\' AND "分類分組名稱" != ? AND "藥品代號" != ?`;
-      coreParams.push(`${ingredientFormPrefix}%`, groupName, drug_id);
+      // LIKE '成分%' AND LIKE '%劑型%' 且排除 L1
+      coreWhere = `"分類分組名稱" LIKE ? ESCAPE '\\' AND "分類分組名稱" LIKE ? ESCAPE '\\' AND "分類分組名稱" != ? AND "藥品代號" != ?`;
+      coreParams.push(`${escapeLike(groupIngredient)}%`, `%${escapeLike(groupStdForm)}%`, groupName, drug_id);
 
     } else if (level === 3) {
-      if (!ingredientPrefix) {
+      if (!groupIngredient) {
         return json({ level, page, pageSize, total: 0, items: [],
           warning: '原藥品分類分組名稱格式不符（需含成分），無法搜尋 Level 3' });
       }
-      // LIKE '成分，%' 且 NOT LIKE '成分，劑型，%'（自然排除 L1 與 L2）
-      const excludeFormPrefix = ingredientFormPrefix || `${escapeLike(groupName)}__`;
+      // LIKE '成分%' AND NOT LIKE '%劑型%'
       coreWhere = `"分類分組名稱" LIKE ? ESCAPE '\\' AND "分類分組名稱" NOT LIKE ? ESCAPE '\\' AND "藥品代號" != ?`;
-      coreParams.push(`${ingredientPrefix}%`, `${excludeFormPrefix}%`, drug_id);
+      coreParams.push(`${escapeLike(groupIngredient)}%`, `%${escapeLike(groupStdForm)}%`, drug_id);
 
     } else if (level === 4) {
       if (!atcPrefix) {
