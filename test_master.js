@@ -267,13 +267,6 @@ function renderResults(append = false) {
   }
 }
 
-// ─── 英文名數字加粗斜體 ────────────────────────────────────────────
-function formatDrugNameEn(rawName) {
-  if (!rawName) return '';
-  // 先跳脫 HTML，再針對數字（含小數點、空格前後）加粗斜體
-  return esc(rawName).replace(/(\d[\d.,]*)/g, '<strong><em>$1</em></strong>');
-}
-
 // ─── 藥品卡片 ─────────────────────────────────────────────────────
 function createDrugCard(drug) {
   const card = document.createElement('div');
@@ -283,22 +276,19 @@ function createDrugCard(drug) {
   card.setAttribute('aria-label', `${drug['藥品中文名稱']}，詳細資訊`);
 
   const nameZh = esc(drug['藥品中文名稱'] || '');
-  const nameEnRaw = drug['藥品英文名稱'] || '';
-  const nameEnFormatted = formatDrugNameEn(nameEnRaw);
+  const nameEn = esc(drug['藥品英文名稱'] || '');
   const price = drug['支付價'] ? `＄ ${drug['支付價']}` : '—';
   const code = esc(drug['藥品代號'] || '');
 
   card.innerHTML = `
     <div class="drug-card-header">
-      <span class="drug-name-en-main">${nameEnFormatted || code}</span>
+      <span class="drug-name-zh">${nameZh}</span>
       <span class="drug-price">${price}</span>
     </div>
-    <div class="drug-name-zh-sub">${nameZh}</div>
+    <div class="drug-name-en">${nameEn || code}</div>
     <div class="drug-tags">
       ${tagBtn('劑型', drug['劑型'])}
       ${tagBtn('單複方', drug['單複方'])}
-      ${tagBtn('藥品分類', drug['藥品分類'])}
-      ${tagBtn('分類分組名稱', drug['分類分組名稱'])}
       ${tagBtn('ATC代碼', drug['ATC代碼'])}
       ${drug['成分'] ? `<span class="field-tag" data-field="成分" data-value="${esc(drug['成分'])}" title="${esc(drug['成分'])}">
         ${svgPlus()}
@@ -327,15 +317,12 @@ function createDrugCard(drug) {
   card.addEventListener('click', () => openDetailByCode(code, drug));
   card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') openDetailByCode(code, drug); });
 
-  // Pro Mode：注入「尋找候選替代品項」按鈕
-  injectSubstituteBtn(card, code);
-
   return card;
 }
 
 function tagBtn(field, value) {
   if (!value) return '';
-  return `<span class="field-tag" data-field="${esc(field)}" data-value="${esc(value)}">${esc(trunc(value, 16))}${svgPlus()}</span>`;
+  return `<span class="field-tag" data-field="${esc(field)}" data-value="${esc(value)}">${svgPlus()}${esc(trunc(value, 16))}</span>`;
 }
 
 // ─── 表格行 ──────────────────────────────────────────────────────
@@ -394,14 +381,6 @@ function openDetailPanel(drug) {
   resultsView.hidden = true;
   detailView.hidden = false;
   window.scrollTo({ top: 0, behavior: 'smooth' });
-
-  // Pro Mode：注入「尋找候選替代品項」按鈕到詳情 Header
-  injectSubstituteBtnDetail(drug['藥品代號']);
-
-  // 非同步載入 EPI 仿單資料
-  if (drug['許可證字號']) {
-    loadEpiData(drug['許可證字號']);
-  }
 }
 
 function closeDetailPanel() {
@@ -418,6 +397,7 @@ function buildDetailHTML(d) {
       try {
         const u = new URL(url);
         const fn = u.searchParams.get('DurgFileName') || '';
+        // 擷取章節號碼：取第一段數字結構 (如 1.2.2.1.)
         const match = fn.match(/^([\d.]+)\./);
         const chapter = match ? match[1] : fn.split('_')[0] || '章節';
         return { url, chapter };
@@ -428,16 +408,17 @@ function buildDetailHTML(d) {
   };
 
   const chapters = parseChapters(d['給付規定章節連結']);
+
+  // 有效期間計算
   const start = d['有效起日'] || '';
   const end   = d['有效迄日'] || '';
-  const licNo = d['許可證字號'] || '';
 
   return `
     <!-- 核心資訊 -->
     <div class="detail-section">
       <div class="detail-core-header">
-        <div class="detail-name-en">${formatDrugNameEn(d['藥品英文名稱'] || '')}</div>
         <div class="detail-name-zh">${esc(d['藥品中文名稱'] || '')}</div>
+        <div class="detail-name-en">${esc(d['藥品英文名稱'] || '')}</div>
         <div class="detail-price-row">
           <div>
             <div class="detail-price-label">支付價格</div>
@@ -476,31 +457,18 @@ function buildDetailHTML(d) {
           ).join('')}
         </div>
       </div>` : ''}
-      ${d['藥品分類'] ? `<div class="detail-row" style="flex-direction: column; gap: 4px;">
-        <span class="detail-row-label" style="margin-bottom: 2px;">藥品分類</span>
-        <div class="ingredient-list">
-          <div class="ingredient-item">
-            <div class="ingredient-text">${esc(d['藥品分類'])}</div>
-            <button class="filter-add-btn" data-field="藥品分類" data-value="${esc(d['藥品分類'])}" title="點擊帶入搜尋" aria-label="帶入 ${esc(d['藥品分類'])} 作為搜尋條件">${svgPlus()}</button>
-          </div>
-        </div>
+      ${d['藥品分類'] ? `<div class="detail-row">
+        <span class="detail-row-label">藥品分類</span>
+        <span class="field-tag" data-field="藥品分類" data-value="${esc(d['藥品分類'])}">${svgPlus()}${esc(d['藥品分類'])}</span>
       </div>` : ''}
-      ${d['分類分組名稱'] ? `<div class="detail-row" style="flex-direction: column; gap: 4px;">
-        <span class="detail-row-label" style="margin-bottom: 2px;">分類分組</span>
-        <div class="ingredient-list">
-          <div class="ingredient-item">
-            <div class="ingredient-text">${esc(d['分類分組名稱'])}</div>
-            <button class="filter-add-btn" data-field="分類分組名稱" data-value="${esc(d['分類分組名稱'])}" title="點擊帶入搜尋" aria-label="帶入 ${esc(d['分類分組名稱'])} 作為搜尋條件">${svgPlus()}</button>
-          </div>
-        </div>
+      ${d['分類分組名稱'] ? `<div class="detail-row">
+        <span class="detail-row-label">分類分組</span>
+        <span class="field-tag" data-field="分類分組名稱" data-value="${esc(d['分類分組名稱'])}">${svgPlus()}${esc(d['分類分組名稱'])}</span>
       </div>` : ''}
-      ${d['ATC代碼'] ? `<div class="detail-row" style="flex-direction: column; gap: 4px;">
-        <span class="detail-row-label" style="margin-bottom: 2px;">ATC 代碼</span>
+      ${d['ATC代碼'] ? `<div class="detail-row">
+        <span class="detail-row-label">ATC 代碼</span>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <div class="ingredient-item" style="margin-bottom:0">
-            <div class="ingredient-text">${esc(d['ATC代碼'])}</div>
-            <button class="filter-add-btn" data-field="ATC代碼" data-value="${esc(d['ATC代碼'])}" title="點擊帶入搜尋" aria-label="帶入 ${esc(d['ATC代碼'])} 作為搜尋條件">${svgPlus()}</button>
-          </div>
+          <span class="field-tag" data-field="ATC代碼" data-value="${esc(d['ATC代碼'])}">${svgPlus()}${esc(d['ATC代碼'])}</span>
           <a class="btn-action btn-action--ext" href="https://atcddd.fhi.no/atc_ddd_index/?code=${encodeURIComponent(d['ATC代碼'])}&showdescription=no" target="_blank" rel="noopener">
             ${svgExternalLink()} ATC 分類查詢
           </a>
@@ -508,38 +476,34 @@ function buildDetailHTML(d) {
       </div>` : ''}
     </div>
 
+    <!-- 有效期間 -->
+    ${start || end ? `<div class="detail-section">
+      <div class="detail-section-title">有效期間</div>
+      <div class="date-range">
+        <span>${esc(formatDate(start))}</span>
+        <div class="date-range-bar"><div class="date-range-fill" style="width:${dateProgress(start,end)}%"></div></div>
+        <span>${esc(formatDate(end)) || '持續有效'}</span>
+      </div>
+    </div>` : ''}
+
     <!-- 廠商與許可 -->
     <div class="detail-section">
       <div class="detail-section-title">廠商與許可</div>
-      ${start || end ? `<div class="detail-row"><span class="detail-row-label">有效起訖</span><span class="detail-row-value" style="font-family:'Figtree', monospace; font-weight:600;">${esc(formatDateYYY(start)) || '—'} → ${esc(formatDateYYY(end)) || '持續有效'}</span></div>` : ''}
       ${d['藥商'] ? `<div class="detail-row"><span class="detail-row-label">藥商</span><span class="detail-row-value">${esc(d['藥商'])}</span></div>` : ''}
       ${d['製造廠名稱'] ? `<div class="detail-row"><span class="detail-row-label">製造廠</span><span class="detail-row-value">${esc(d['製造廠名稱'])}</span></div>` : ''}
-      ${licNo ? `<div class="detail-row">
+      ${d['許可證字號'] ? `<div class="detail-row">
         <span class="detail-row-label">許可字號</span>
         <div class="copy-wrap">
-          <span class="detail-row-value" style="font-family:monospace;font-size:.85rem">${esc(licNo)}</span>
-          <button class="copy-btn" onclick="copyText('${esc(licNo)}', this)">${svgCopy()} 複製</button>
+          <span class="detail-row-value" style="font-family:monospace;font-size:.85rem">${esc(d['許可證字號'])}</span>
+          <button class="copy-btn" onclick="copyText('${esc(d['許可證字號'])}', this)">${svgCopy()} 複製</button>
         </div>
       </div>
-      ` : ''}
+      <div class="action-buttons">
+        <a class="btn-action btn-action--ext" href="https://mcp.fda.gov.tw/im_detail_1/${encodeURIComponent(d['許可證字號'])}" target="_blank" rel="noopener">
+          ${svgExternalLink()} 電子仿單
+        </a>
+      </div>` : ''}
     </div>
-
-    <!-- EPI 適應症（非同步載入）+ 延伸按鈕 -->
-    ${licNo ? `<div class="detail-section" id="epiSection">
-      <div class="detail-section-title">適應症</div>
-      <div id="epiContent" class="epi-loading">
-        <div class="spinner spinner--sm"></div>
-        <span>載入中...</span>
-      </div>
-      <div class="action-buttons" style="margin-top:14px">
-        <a class="btn-action btn-action--ext" href="https://epi.mingster.workers.dev/?q=${encodeURIComponent(licNo)}" target="_blank" rel="noopener">
-          ${svgExternalLink()} 電子仿單資訊應用平台
-        </a>
-        <a class="btn-action btn-action--ext" href="https://mcp.fda.gov.tw/im_shape/${encodeURIComponent(licNo)}" target="_blank" rel="noopener">
-          ${svgExternalLink()} 藥品外觀查詢
-        </a>
-      </div>
-    </div>` : ''}
 
     <!-- 給付規定 -->
     ${chapters.length > 0 ? `<div class="detail-section">
@@ -553,54 +517,6 @@ function buildDetailHTML(d) {
       </div>
     </div>` : ''}
   `;
-}
-
-// ─── EPI API 非同步載入（只取適應症）────────────────────────────────
-async function loadEpiData(licNo) {
-  const el = document.getElementById('epiContent');
-  if (!el) return;
-  
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 秒 Timeout
-  
-  try {
-    const res = await fetch(
-      `https://epi.mingtc.com/api/v1/labels?licenseNo=${encodeURIComponent(licNo)}&sec=indication&format=json`,
-      { signal: controller.signal }
-    );
-    clearTimeout(timeoutId);
-    
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error?.message || '查無資料');
-
-    const text = data.data?.sections?.indication?.text || '';
-    el.className = '';
-    
-    if (text) {
-      // 移除開頭可能獨立存在的標題（如 "2" 或 "適應症" 等）
-      let cleanedText = text.trim().replace(/^(?:[\d\s]*(?:2|二)\.?\s*|適應症\s*[:：]?\s*)/i, '');
-      
-      // 去掉行首數字標號（如 1. 2. (1) 等），並過濾冗餘的「適應症」單行與空行
-      const cleaned = cleanedText
-        .split('\n')
-        .map(line => line.replace(/^\s*(\d+[.)、]|[（(]\d+[)）])\s*/, '').trim())
-        .filter(line => line && !/^適應症\s*[:：]?$/i.test(line))
-        .join('\n');
-        
-      el.innerHTML = cleaned ? `<div class="epi-block-text">${esc(cleaned)}</div>` : '<p class="epi-none">此藥品無適應症資料</p>';
-    } else {
-      el.innerHTML = '<p class="epi-none">此藥品無適應症資料</p>';
-    }
-  } catch (err) {
-    clearTimeout(timeoutId);
-    el.className = '';
-    // 若為 Timeout，顯示網路連線逾時
-    if (err.name === 'AbortError') {
-      el.innerHTML = `<p class="epi-none">伺服器回應過慢，載入適應症逾時。請稍後再試。</p>`;
-    } else {
-      el.innerHTML = `<p class="epi-none">資料載入失敗：${esc(err.message)}</p>`;
-    }
-  }
 }
 
 // ─── Tag 帶入篩選 ─────────────────────────────────────────────────
@@ -797,23 +713,6 @@ function formatDate(str) {
   const m = String(str).match(/(\d{4})(\d{2})(\d{2})/);
   return m ? `${m[1]}/${m[2]}/${m[3]}` : str;
 }
-// 民國年格式 YYY/MM/DD（資料已是民國年 YYYMMDD 格式）
-function formatDateYYY(str) {
-  if (!str) return '';
-  const s = String(str).trim();
-  // 可能是 7 位 YYYMMDD 或 8 位 YYYYMMDD (西元)
-  if (s.length === 7) {
-    // 民國年 7 碼：YYY MM DD
-    return `${s.slice(0,3)}/${s.slice(3,5)}/${s.slice(5,7)}`;
-  }
-  const m = s.match(/^(\d{4})(\d{2})(\d{2})$/);
-  if (m) {
-    // 西元年 8 碼，轉民國
-    const yyy = parseInt(m[1], 10) - 1911;
-    return `${yyy}/${m[2]}/${m[3]}`;
-  }
-  return str;
-}
 function dateProgress(start, end) {
   try {
     const s = new Date(start), e = new Date(end), n = new Date();
@@ -860,513 +759,3 @@ function svgPdf() {
 
 // ─── 啟動 ────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', init);
-
-
-/* ═══════════════════════════════════════════════════════════════
-   ██████╗ ██████╗  ██████╗     ███╗   ███╗ ██████╗ ██████╗ ███████╗
-   ██╔══██╗██╔══██╗██╔═══██╗    ████╗ ████║██╔═══██╗██╔══██╗██╔════╝
-   ██████╔╝██████╔╝██║   ██║    ██╔████╔██║██║   ██║██║  ██║█████╗
-   ██╔═══╝ ██╔══██╗██║   ██║    ██║╚██╔╝██║██║   ██║██║  ██║██╔══╝
-   ██║     ██║  ██║╚██████╔╝    ██║ ╚═╝ ██║╚██████╔╝██████╔╝███████╗
-   ╚═╝     ╚═╝  ╚═╝ ╚═════╝     ╚═╝     ╚═╝ ╚═════╝ ╚═════╝ ╚══════╝
-   候選替代品項搜尋與決策檢核平台 — Pro Mode
-   僅在 ?mode=pro 或 localStorage 有授權時顯示
-   ═══════════════════════════════════════════════════════════════ */
-
-// ─── Pro Mode 偵測與授權 ─────────────────────────────────────────
-const PRO_STORAGE_KEY = 'nhi_pro_mode';
-const PRO_URL_PARAM   = 'mode';
-const PRO_URL_VALUE   = 'pro';
-
-/** 偵測當前是否為 Pro Mode */
-function isProMode() {
-  const urlParams = new URLSearchParams(window.location.search);
-  if (urlParams.get(PRO_URL_PARAM) === PRO_URL_VALUE) {
-    // 寫入 localStorage，下次免打參數
-    try { localStorage.setItem(PRO_STORAGE_KEY, '1'); } catch (_) {}
-    return true;
-  }
-  try { return localStorage.getItem(PRO_STORAGE_KEY) === '1'; } catch (_) {}
-  return false;
-}
-
-// ─── Pro Mode 按鈕注入 ───────────────────────────────────────────
-/** 注入「尋找候選替代品項」按鈕到藥品卡片 */
-function injectSubstituteBtn(card, drugCode) {
-  if (!isProMode()) return;
-  const btn = document.createElement('button');
-  btn.className = 'sub-trigger-btn';
-  btn.dataset.code = drugCode;
-  btn.innerHTML = `
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-      <line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
-    </svg>
-    尋找候選替代品項
-  `;
-  btn.addEventListener('click', e => {
-    e.stopPropagation();
-    openSubstituteModal(drugCode);
-  });
-  const tagsDiv = card.querySelector('.drug-tags');
-  if (tagsDiv) tagsDiv.insertBefore(btn, tagsDiv.firstChild);
-}
-
-/** 注入「尋找候選替代品項」按鈕到詳情 Panel */
-function injectSubstituteBtnDetail(drugCode) {
-  if (!isProMode()) return;
-  const existing = document.getElementById('subDetailBtn');
-  if (existing) existing.remove();
-  const btn = document.createElement('button');
-  btn.id = 'subDetailBtn';
-  btn.className = 'sub-trigger-btn sub-trigger-btn--detail';
-  btn.innerHTML = `
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-      <line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
-    </svg>
-    尋找候選替代品項
-  `;
-  btn.addEventListener('click', () => openSubstituteModal(drugCode));
-  const detailHeader = document.querySelector('.detail-header-actions');
-  if (detailHeader) detailHeader.appendChild(btn);
-}
-
-// ─── Substitute Modal 狀態 ───────────────────────────────────────
-const subState = {
-  targetDrugId: null,
-  currentLevel: 1,
-  currentPage: 1,
-  pageSize: 20,
-  totalItems: 0,
-  selectedIds: new Set(),
-  filters: { drug_class: '', dosage_form: '', has_license: '' },
-  levelWarnings: {
-    1: '依健保分類分組產生，請確認適應症、給付條件與院內供應狀態。',
-    2: '規格或含量可能不同，請確認是否需劑量換算。',
-    3: '劑型不同，請確認給藥途徑、釋放特性與臨床可替代性。',
-    4: '不同成分，僅供治療替代參考。請重新評估適應症、劑量、禁忌、交互作用與健保給付條件。',
-  },
-};
-
-// ─── DOM refs for Modal ──────────────────────────────────────────
-const subModal          = document.getElementById('substituteModal');
-const subModalClose     = document.getElementById('subModalClose');
-const subTargetInfo     = document.getElementById('subTargetInfo');
-const subTabs           = document.getElementById('subTabs');
-const subWarningBar     = document.getElementById('subWarningBar');
-const subWarningText    = document.getElementById('subWarningText');
-const subListLoading    = document.getElementById('subListLoading');
-const subListEmpty      = document.getElementById('subListEmpty');
-const subTable          = document.getElementById('subTable');
-const subTableBody      = document.getElementById('subTableBody');
-const subPagination     = document.getElementById('subPagination');
-const subPageInfo       = document.getElementById('subPageInfo');
-const subPrevPage       = document.getElementById('subPrevPage');
-const subNextPage       = document.getElementById('subNextPage');
-const subSelectedCount  = document.getElementById('subSelectedCount');
-const subGenerateCompare = document.getElementById('subGenerateCompare');
-const subClearSelected  = document.getElementById('subClearSelected');
-const subCheckAll       = document.getElementById('subCheckAll');
-const subFilterClass    = document.getElementById('subFilterClass');
-const subFilterForm     = document.getElementById('subFilterForm');
-const subFilterLicense  = document.getElementById('subFilterLicense');
-const subFilterClear    = document.getElementById('subFilterClear');
-const subFilterCount    = document.getElementById('subFilterCount');
-const compareModal      = document.getElementById('compareModal');
-const compareModalClose = document.getElementById('compareModalClose');
-const compareLoading    = document.getElementById('compareLoading');
-const compareBody       = document.getElementById('compareBody');
-
-// ─── 開啟 Substitute Modal ───────────────────────────────────────
-async function openSubstituteModal(drugId) {
-  subState.targetDrugId = drugId;
-  subState.currentLevel = 1;
-  subState.currentPage  = 1;
-  subState.selectedIds  = new Set();
-  subState.filters      = { drug_class: '', dosage_form: '', has_license: '' };
-  updateSelectedCount();
-
-  // 重置篩選器
-  if (subFilterClass)   subFilterClass.value   = '';
-  if (subFilterForm)    subFilterForm.value     = '';
-  if (subFilterLicense) subFilterLicense.value  = '';
-
-  // 重置 Tabs
-  subTabs.querySelectorAll('.sub-tab').forEach(t => {
-    t.classList.toggle('sub-tab--active', parseInt(t.dataset.level) === 1);
-    t.setAttribute('aria-selected', String(parseInt(t.dataset.level) === 1));
-  });
-  [1,2,3,4].forEach(l => {
-    const el = document.getElementById(`subCount${l}`);
-    if (el) el.textContent = '…';
-  });
-
-  // 重置清單
-  showSubListState('loading');
-  subModal.hidden = false;
-  document.body.style.overflow = 'hidden';
-  updateWarningBar();
-
-  // 取得摘要數量
-  try {
-    const summaryRes = await fetch(`${API_BASE}/substitutes/summary?drug_id=${encodeURIComponent(drugId)}`);
-    const summary    = await summaryRes.json();
-    if (!summaryRes.ok) throw new Error(summary.error || '摘要載入失敗');
-
-    // 顯示原藥品資訊
-    const t = summary.target || {};
-    subTargetInfo.innerHTML = `
-      <div class="sub-target-name-en">${esc(t['藥品英文名稱'] || t['藥品代號'] || '—')}</div>
-      <div class="sub-target-name-zh">${esc(t['藥品中文名稱'] || '')}</div>
-      <div class="sub-target-meta">
-        ${t['成分']         ? `<span class="badge badge-blue">${esc(trunc(t['成分'], 30))}</span>` : ''}
-        ${t['劑型']         ? `<span class="badge badge-green">${esc(t['劑型'])}</span>` : ''}
-        ${t['分類分組名稱'] ? `<span class="badge badge-gray">${esc(trunc(t['分類分組名稱'], 30))}</span>` : ''}
-        ${t['ATC代碼']      ? `<span class="badge badge-gray">ATC: ${esc(t['ATC代碼'])}</span>` : ''}
-      </div>
-    `;
-
-    // 填入各 Level 數量
-    const lvls = summary.levels || {};
-    [1,2,3,4].forEach(l => {
-      const el = document.getElementById(`subCount${l}`);
-      if (el) el.textContent = (lvls[`level${l}`]?.count ?? 0).toLocaleString();
-    });
-
-    // 載入 Level 1 清單
-    await loadSubList();
-
-  } catch (err) {
-    showToast('載入候選摘要失敗：' + err.message, 'error');
-    showSubListState('empty');
-  }
-}
-
-// ─── 載入候選清單 ────────────────────────────────────────────────
-async function loadSubList() {
-  showSubListState('loading');
-  const params = new URLSearchParams({
-    drug_id:  subState.targetDrugId,
-    level:    subState.currentLevel,
-    page:     subState.currentPage,
-    pageSize: subState.pageSize,
-  });
-  if (subState.filters.drug_class)  params.set('drug_class',  subState.filters.drug_class);
-  if (subState.filters.dosage_form) params.set('dosage_form', subState.filters.dosage_form);
-  if (subState.filters.has_license !== '') params.set('has_license', subState.filters.has_license);
-
-  try {
-    const res  = await fetch(`${API_BASE}/substitutes?${params}`);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || '清單載入失敗');
-
-    subState.totalItems = data.total || 0;
-
-    if (!data.items || data.items.length === 0) {
-      showSubListState('empty');
-      subFilterCount.textContent = '';
-      return;
-    }
-
-    renderSubList(data.items);
-    updateSubPagination(data.total, data.page, data.pageSize);
-    subFilterCount.textContent = `共 ${data.total.toLocaleString()} 筆`;
-    showSubListState('table');
-
-  } catch (err) {
-    showToast('載入候選清單失敗：' + err.message, 'error');
-    showSubListState('empty');
-  }
-}
-
-// ─── 渲染候選清單 ────────────────────────────────────────────────
-function renderSubList(items) {
-  subTableBody.innerHTML = '';
-  const frag = document.createDocumentFragment();
-
-  items.forEach(drug => {
-    const code = drug['藥品代號'] || '';
-    const isChecked = subState.selectedIds.has(code);
-    const hasLic = !!(drug['許可證字號']);
-    const hasReim = !!(drug['給付規定章節連結']);
-
-    const tr = document.createElement('tr');
-    if (isChecked) tr.classList.add('sub-row--selected');
-    tr.innerHTML = `
-      <td class="sub-td-check">
-        <input type="checkbox" class="sub-row-check" data-code="${esc(code)}" ${isChecked ? 'checked' : ''}
-          ${subState.selectedIds.size >= 5 && !isChecked ? 'disabled' : ''}>
-      </td>
-      <td><code class="sub-code">${esc(code)}</code></td>
-      <td>
-        <div class="sub-name-en">${esc(trunc(drug['藥品英文名稱'] || '—', 30))}</div>
-        <div class="sub-name-zh">${esc(drug['藥品中文名稱'] || '')}</div>
-      </td>
-      <td class="sub-td-wrap" title="${esc(drug['成分'] || '')}">${esc(trunc(drug['成分'] || '—', 28))}</td>
-      <td>${drug['劑型'] ? `<span class="badge badge-blue">${esc(drug['劑型'])}</span>` : '—'}</td>
-      <td>${esc((drug['規格量'] || '') + ' ' + (drug['規格單位'] || ''))}</td>
-      <td>${esc(drug['藥品分類'] || '—')}</td>
-      <td><code>${esc(drug['ATC代碼'] || '—')}</code></td>
-      <td>${hasLic
-        ? `<span class="badge badge-green sub-lic" title="${esc(drug['許可證字號'])}">有</span>`
-        : '<span class="badge badge-gray">無</span>'}</td>
-      <td>${hasReim
-        ? `<a href="${esc(drug['給付規定章節連結'].split(',')[0].trim())}" target="_blank" rel="noopener" class="sub-link">查看 ${svgExternalLink()}</a>`
-        : '—'}</td>
-    `;
-
-    tr.querySelector('.sub-row-check').addEventListener('change', e => {
-      toggleSubSelection(code, e.target.checked, tr);
-    });
-
-    frag.appendChild(tr);
-  });
-
-  subTableBody.appendChild(frag);
-  // 同步全選 checkbox 狀態
-  subCheckAll.checked = items.length > 0 && items.every(d => subState.selectedIds.has(d['藥品代號'] || ''));
-  subCheckAll.indeterminate = !subCheckAll.checked && items.some(d => subState.selectedIds.has(d['藥品代號'] || ''));
-}
-
-// ─── 勾選管理 ───────────────────────────────────────────────────
-function toggleSubSelection(code, checked, tr) {
-  if (checked) {
-    if (subState.selectedIds.size >= 5) {
-      showToast('比較品項過多會降低判讀效率，最多選擇 5 個品項進行比較。', 'error');
-      // 取消這次勾選
-      tr.querySelector('.sub-row-check').checked = false;
-      return;
-    }
-    subState.selectedIds.add(code);
-    tr.classList.add('sub-row--selected');
-  } else {
-    subState.selectedIds.delete(code);
-    tr.classList.remove('sub-row--selected');
-  }
-  updateSelectedCount();
-  // 重新渲染以更新 disabled 狀態
-  const rows = subTableBody.querySelectorAll('.sub-row-check');
-  rows.forEach(cb => {
-    if (!cb.checked) cb.disabled = subState.selectedIds.size >= 5;
-  });
-}
-
-function updateSelectedCount() {
-  const count = subState.selectedIds.size;
-  subSelectedCount.textContent = count;
-  subGenerateCompare.disabled = count < 2;
-}
-
-// ─── 分頁控制 ────────────────────────────────────────────────────
-function updateSubPagination(total, page, pageSize) {
-  const totalPages = Math.ceil(total / pageSize);
-  subPagination.hidden = totalPages <= 1;
-  subPageInfo.textContent = `第 ${page} / ${totalPages} 頁`;
-  subPrevPage.disabled = page <= 1;
-  subNextPage.disabled = page >= totalPages;
-}
-
-// ─── 警示列 ─────────────────────────────────────────────────────
-function updateWarningBar() {
-  const warning = subState.levelWarnings[subState.currentLevel] || '';
-  subWarningText.textContent = warning;
-  const isL4 = subState.currentLevel === 4;
-  subWarningBar.className = `sub-warning-bar ${isL4 ? 'sub-warning-bar--l4' : ''}`;
-}
-
-// ─── 顯示狀態 ───────────────────────────────────────────────────
-function showSubListState(state) {
-  subListLoading.hidden = state !== 'loading';
-  subListEmpty.hidden   = state !== 'empty';
-  subTable.hidden       = state !== 'table';
-  subPagination.hidden  = state !== 'table';
-}
-
-// ─── 比較表產生 ──────────────────────────────────────────────────
-async function generateCompareTable() {
-  if (subState.selectedIds.size < 2) return;
-  compareLoading.hidden = false;
-  compareBody.hidden    = true;
-  subModal.hidden       = true;
-  compareModal.hidden   = false;
-
-  const candidateIds = [...subState.selectedIds].join(',');
-  const url = `${API_BASE}/substitutes/compare?target_id=${encodeURIComponent(subState.targetDrugId)}&candidate_ids=${encodeURIComponent(candidateIds)}`;
-
-  try {
-    const res  = await fetch(url);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || '比較表產生失敗');
-    renderCompareTable(data.target, data.candidates);
-    compareLoading.hidden = true;
-    compareBody.hidden    = false;
-  } catch (err) {
-    showToast('產生比較表失敗：' + err.message, 'error');
-    compareModal.hidden = true;
-    subModal.hidden     = false;
-  }
-}
-
-// ─── 比較表渲染 ──────────────────────────────────────────────────
-const LEVEL_COLORS = { 0: '', 1: 'sub-level-1', 2: 'sub-level-2', 3: 'sub-level-3', 4: 'sub-level-4' };
-
-function renderCompareTable(target, candidates) {
-  const all = [target, ...candidates];
-  const FIELDS = [
-    ['替代層級', d => d.level === 0 ? '<span class="badge badge-gray">目標原藥</span>' : `<span class="badge ${LEVEL_COLORS[d.level] || ''}">${esc(d.level_label || '')}</span>`],
-    ['替代理由', d => esc(d.reason || '—')],
-    ['系統提醒', d => d.warning ? `<span class="compare-warning-cell">${esc(d.warning)}</span>` : '—'],
-    ['藥品代號', d => `<code>${esc(d['藥品代號'] || '—')}</code>`],
-    ['藥品英文名稱', d => esc(d['藥品英文名稱'] || '—')],
-    ['藥品中文名稱', d => esc(d['藥品中文名稱'] || '—')],
-    ['成分', d => `<span title="${esc(d['成分'] || '')}">${esc(trunc(d['成分'] || '—', 40))}</span>`],
-    ['劑型', d => d['劑型'] ? `<span class="badge badge-blue">${esc(d['劑型'])}</span>` : '—'],
-    ['規格', d => esc((d['規格量'] || '') + ' ' + (d['規格單位'] || ''))],
-    ['分類分組名稱', d => `<span title="${esc(d['分類分組名稱'] || '')}">${esc(trunc(d['分類分組名稱'] || '—', 35))}</span>`],
-    ['藥品分類', d => esc(d['藥品分類'] || '—')],
-    ['ATC代碼', d => `<code>${esc(d['ATC代碼'] || '—')}</code>`],
-    ['許可證字號', d => esc(d['許可證字號'] || '—')],
-    ['健保給付規範', d => {
-      const url = (d['給付規定章節連結'] || '').split(',')[0].trim();
-      return url ? `<a href="${esc(url)}" target="_blank" rel="noopener" class="sub-link">查看 ${svgExternalLink()}</a>` : '—';
-    }],
-  ];
-
-  const colHeaders = all.map((d, i) => {
-    const cls = i === 0 ? 'compare-th-target' : LEVEL_COLORS[d.level] || '';
-    return `<th class="${cls}">${esc(trunc(d['藥品英文名稱'] || d['藥品代號'] || '—', 20))}</th>`;
-  }).join('');
-
-  const rows = FIELDS.map(([label, fn]) => {
-    const cells = all.map((d, i) => {
-      const cls = i === 0 ? 'compare-td-target' : '';
-      return `<td class="${cls}">${fn(d)}</td>`;
-    }).join('');
-    return `<tr><th class="compare-row-label">${label}</th>${cells}</tr>`;
-  }).join('');
-
-  compareBody.innerHTML = `
-    <div class="compare-scroll-hint">← 橫向捲動查看全部欄位 →</div>
-    <div class="compare-table-wrap">
-      <table class="compare-table">
-        <thead><tr><th class="compare-corner"></th>${colHeaders}</tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
-    ${candidates.some(c => c.level === 4) ? `
-      <div class="compare-l4-notice">
-        ⚠️ 比較表中含有「同ATC類別候選」（橘色標記欄位），為不同成分之藥品，僅供治療替代方向參考，不代表可直接替代。
-      </div>` : ''}
-  `;
-}
-
-// ─── Modal 事件綁定 ──────────────────────────────────────────────
-(function initSubstituteFeature() {
-  // Tab 切換
-  subTabs.addEventListener('click', async e => {
-    const tab = e.target.closest('.sub-tab');
-    if (!tab) return;
-    const level = parseInt(tab.dataset.level);
-    subState.currentLevel = level;
-    subState.currentPage  = 1;
-    subTabs.querySelectorAll('.sub-tab').forEach(t => {
-      t.classList.toggle('sub-tab--active', t === tab);
-      t.setAttribute('aria-selected', String(t === tab));
-    });
-    updateWarningBar();
-    await loadSubList();
-  });
-
-  // 分頁按鈕
-  subPrevPage.addEventListener('click', async () => {
-    if (subState.currentPage > 1) { subState.currentPage--; await loadSubList(); }
-  });
-  subNextPage.addEventListener('click', async () => {
-    const totalPages = Math.ceil(subState.totalItems / subState.pageSize);
-    if (subState.currentPage < totalPages) { subState.currentPage++; await loadSubList(); }
-  });
-
-  // 全選
-  subCheckAll.addEventListener('change', () => {
-    subTableBody.querySelectorAll('.sub-row-check').forEach(cb => {
-      const code = cb.dataset.code;
-      if (subCheckAll.checked) {
-        if (!subState.selectedIds.has(code) && subState.selectedIds.size < 5) {
-          subState.selectedIds.add(code);
-          cb.closest('tr').classList.add('sub-row--selected');
-        }
-      } else {
-        subState.selectedIds.delete(code);
-        cb.closest('tr').classList.remove('sub-row--selected');
-      }
-      cb.checked = subState.selectedIds.has(code);
-    });
-    updateSelectedCount();
-  });
-
-  // 篩選
-  [subFilterClass, subFilterForm, subFilterLicense].forEach(sel => {
-    if (!sel) return;
-    sel.addEventListener('change', async () => {
-      subState.filters.drug_class  = subFilterClass.value;
-      subState.filters.dosage_form = subFilterForm.value;
-      subState.filters.has_license = subFilterLicense.value;
-      subState.currentPage = 1;
-      await loadSubList();
-    });
-  });
-
-  if (subFilterClear) {
-    subFilterClear.addEventListener('click', async () => {
-      subFilterClass.value   = '';
-      subFilterForm.value    = '';
-      subFilterLicense.value = '';
-      subState.filters = { drug_class: '', dosage_form: '', has_license: '' };
-      subState.currentPage   = 1;
-      await loadSubList();
-    });
-  }
-
-  // 清除勾選
-  subClearSelected.addEventListener('click', () => {
-    subState.selectedIds.clear();
-    updateSelectedCount();
-    subTableBody.querySelectorAll('.sub-row-check').forEach(cb => {
-      cb.checked = false;
-      cb.disabled = false;
-      cb.closest('tr').classList.remove('sub-row--selected');
-    });
-    subCheckAll.checked = false;
-  });
-
-  // 產生比較表
-  subGenerateCompare.addEventListener('click', generateCompareTable);
-
-  // 關閉 Substitute Modal
-  subModalClose.addEventListener('click', () => {
-    subModal.hidden = true;
-    document.body.style.overflow = '';
-  });
-  subModal.addEventListener('click', e => {
-    if (e.target === subModal) { subModal.hidden = true; document.body.style.overflow = ''; }
-  });
-
-  // 關閉 Compare Modal
-  compareModalClose.addEventListener('click', () => {
-    compareModal.hidden = true;
-    subModal.hidden     = false;
-  });
-  compareModal.addEventListener('click', e => {
-    if (e.target === compareModal) { compareModal.hidden = true; subModal.hidden = false; }
-  });
-
-  // ESC 關閉
-  document.addEventListener('keydown', e => {
-    if (e.key !== 'Escape') return;
-    if (!compareModal.hidden) { compareModal.hidden = true; subModal.hidden = false; }
-    else if (!subModal.hidden) { subModal.hidden = true; document.body.style.overflow = ''; }
-  });
-})();
-
-
