@@ -17,6 +17,7 @@ const CORS = {
   'Access-Control-Allow-Methods': 'GET, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
   'Content-Type': 'application/json; charset=utf-8',
+  'Cache-Control': 'no-store',
 };
 
 const LEVEL_META = {
