@@ -308,6 +308,14 @@
           <option value="1">有許可證字號</option>
           <option value="0">無許可證字號</option>
         </select>
+        <select id="subFilterManufacturer" class="sub-filter-select" aria-label="藥商">
+          <option value="">藥商（全部）</option>
+        </select>
+        <select id="subFilterReimbursement" class="sub-filter-select" aria-label="給付規定">
+          <option value="">給付規定（全部）</option>
+          <option value="1">有給付規定</option>
+          <option value="0">無給付規定</option>
+        </select>
         <button class="sub-filter-clear" id="subFilterClear">清除篩選</button>
         <span class="sub-filter-count" id="subFilterCount"></span>
       </div>
@@ -334,6 +342,7 @@
               <th class="sub-th-sort" data-sort="規格量">規格 <span class="sub-sort-icon" data-col="規格量"></span></th>
               <th>藥品分類</th>
               <th class="sub-th-sort" data-sort="ATC代碼">ATC代碼 <span class="sub-sort-icon" data-col="ATC代碼"></span></th>
+              <th class="sub-th-sort" data-sort="藥商">藥商 <span class="sub-sort-icon" data-col="藥商"></span></th>
               <th>許可證字號</th>
               <th>給付規範</th>
             </tr>

@@ -944,7 +944,7 @@ const subState = {
   pageSize: 20,
   totalItems: 0,
   selectedIds: new Set(),
-  filters: { drug_class: '', dosage_form: '', has_license: '' },
+  filters: { drug_class: '', dosage_form: '', has_license: '', manufacturer: '', has_reimbursement: '' },
   sort: '',
   order: 'asc',
   atcDepth: 5,
@@ -985,6 +985,8 @@ const subCheckAll       = document.getElementById('subCheckAll');
 const subFilterClass    = document.getElementById('subFilterClass');
 const subFilterForm     = document.getElementById('subFilterForm');
 const subFilterLicense  = document.getElementById('subFilterLicense');
+const subFilterManufacturer = document.getElementById('subFilterManufacturer');
+const subFilterReimbursement = document.getElementById('subFilterReimbursement');
 const subFilterClear    = document.getElementById('subFilterClear');
 const subFilterCount    = document.getElementById('subFilterCount');
 const subAtcDepthWrap   = document.getElementById('subAtcDepthWrap');
@@ -1002,7 +1004,7 @@ async function openSubstituteModal(drugId) {
   subState.currentLevel = 1;
   subState.currentPage  = 1;
   subState.selectedIds  = new Set();
-  subState.filters      = { drug_class: '', dosage_form: '', has_license: '' };
+  subState.filters      = { drug_class: '', dosage_form: '', has_license: '', manufacturer: '', has_reimbursement: '' };
   subState.atcDepth     = 5;
   subState.sort         = '';
   subState.order        = 'asc';
@@ -1013,6 +1015,8 @@ async function openSubstituteModal(drugId) {
   if (subFilterClass)   subFilterClass.value   = '';
   if (subFilterForm)    subFilterForm.value     = '';
   if (subFilterLicense) subFilterLicense.value  = '';
+  if (subFilterManufacturer) subFilterManufacturer.value = '';
+  if (subFilterReimbursement) subFilterReimbursement.value = '';
   if (subAtcDepth)      subAtcDepth.value       = '5';
 
   // 重置 Tabs
@@ -1080,9 +1084,12 @@ async function loadSubList() {
   if (subState.currentLevel === 4) params.set('atc_depth', subState.atcDepth);
   if (subState.filters.drug_class)  params.set('drug_class',  subState.filters.drug_class);
   if (subState.filters.dosage_form) params.set('dosage_form', subState.filters.dosage_form);
+  if (subState.filters.manufacturer) params.set('manufacturer', subState.filters.manufacturer);
   if (subState.filters.has_license !== '') params.set('has_license', subState.filters.has_license);
+  if (subState.filters.has_reimbursement !== '') params.set('has_reimbursement', subState.filters.has_reimbursement);
   if (subState.sort)  params.set('sort',  subState.sort);
   if (subState.order) params.set('order', subState.order);
+
 
   try {
     const res  = await fetch(`${API_BASE}/substitutes?${params}`);
@@ -1139,6 +1146,7 @@ function renderSubList(items) {
       <td>${esc((drug['規格量'] || '') + ' ' + (drug['規格單位'] || ''))}</td>
       <td>${esc(drug['藥品分類'] || '—')}</td>
       <td><code>${esc(drug['ATC代碼'] || '—')}</code></td>
+      <td><span class="sub-mfr" title="${esc(drug['藥商'] || '')}">${esc(trunc(drug['藥商'] || '—', 12))}</span></td>
       <td>${hasLic
         ? `<span class="badge badge-green sub-lic" title="${esc(drug['許可證字號'])}">有</span>`
         : '<span class="badge badge-gray">無</span>'}</td>
@@ -1260,6 +1268,17 @@ function populateFilterDropdowns(filters) {
       opt.textContent = form;
       if (form === currentVal) opt.selected = true;
       subFilterForm.appendChild(opt);
+    });
+  }
+  if (subFilterManufacturer && filters.manufacturers) {
+    const currentVal = subFilterManufacturer.value;
+    subFilterManufacturer.innerHTML = '<option value="">藥商（全部）</option>';
+    filters.manufacturers.forEach(mfr => {
+      const opt = document.createElement('option');
+      opt.value = mfr;
+      opt.textContent = mfr;
+      if (mfr === currentVal) opt.selected = true;
+      subFilterManufacturer.appendChild(opt);
     });
   }
 }
@@ -1408,12 +1427,14 @@ function renderCompareTable(target, candidates) {
   });
 
   // 篩選
-  [subFilterClass, subFilterForm, subFilterLicense].forEach(sel => {
+  [subFilterClass, subFilterForm, subFilterLicense, subFilterManufacturer, subFilterReimbursement].forEach(sel => {
     if (!sel) return;
     sel.addEventListener('change', async () => {
-      subState.filters.drug_class  = subFilterClass.value;
-      subState.filters.dosage_form = subFilterForm.value;
-      subState.filters.has_license = subFilterLicense.value;
+      subState.filters.drug_class       = subFilterClass.value;
+      subState.filters.dosage_form      = subFilterForm.value;
+      subState.filters.has_license      = subFilterLicense.value;
+      subState.filters.manufacturer     = subFilterManufacturer.value;
+      subState.filters.has_reimbursement = subFilterReimbursement.value;
       subState.currentPage = 1;
       await loadSubList();
     });
@@ -1424,7 +1445,9 @@ function renderCompareTable(target, candidates) {
       subFilterClass.value   = '';
       subFilterForm.value    = '';
       subFilterLicense.value = '';
-      subState.filters = { drug_class: '', dosage_form: '', has_license: '' };
+      if (subFilterManufacturer)  subFilterManufacturer.value = '';
+      if (subFilterReimbursement) subFilterReimbursement.value = '';
+      subState.filters = { drug_class: '', dosage_form: '', has_license: '', manufacturer: '', has_reimbursement: '' };
       subState.currentPage   = 1;
       await loadSubList();
     });

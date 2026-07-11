@@ -43,7 +43,7 @@ const LEVEL_META = {
   },
 };
 
-const VALID_SORT    = ['藥品代號', '藥品中文名稱', '成分', '劑型', '規格量', 'ATC代碼', '支付價', '藥品分類'];
+const VALID_SORT    = ['藥品代號', '藥品中文名稱', '成分', '劑型', '規格量', 'ATC代碼', '支付價', '藥品分類', '藥商'];
 const DEFAULT_PAGE  = 20;
 const MAX_PAGE_SIZE = 100;
 
@@ -73,6 +73,7 @@ export async function onRequestGet({ request, env }) {
   // 篩選
   const drug_class    = searchParams.get('drug_class') || '';
   const dosage_form   = searchParams.get('dosage_form') || '';
+  const manufacturer  = searchParams.get('manufacturer') || '';
   const has_license   = searchParams.get('has_license');
   const has_reimburse = searchParams.get('has_reimbursement');
 
@@ -147,6 +148,7 @@ export async function onRequestGet({ request, env }) {
 
     if (drug_class) { filterClauses.push(`"藥品分類" = ?`); filterParams.push(drug_class); }
     if (dosage_form) { filterClauses.push(`"劑型" = ?`); filterParams.push(dosage_form); }
+    if (manufacturer) { filterClauses.push(`"藥商" = ?`); filterParams.push(manufacturer); }
     if (has_license === '1') filterClauses.push(`("許可證字號" IS NOT NULL AND "許可證字號" != '')`);
     else if (has_license === '0') filterClauses.push(`("許可證字號" IS NULL OR "許可證字號" = '')`);
     if (has_reimburse === '1') filterClauses.push(`("給付規定章節連結" IS NOT NULL AND "給付規定章節連結" != '')`);
@@ -191,16 +193,19 @@ export async function onRequestGet({ request, env }) {
     // ── 從結果集中取得篩選器可用選項 ──────────────────────────────
     // 只在第一頁且無篩選時回傳（避免每次都多一次 query）
     let filtersData = undefined;
-    if (page === 1 && !drug_class && !dosage_form) {
-      const [classRows, formRows] = await Promise.all([
+    if (page === 1 && !drug_class && !dosage_form && !manufacturer) {
+      const [classRows, formRows, manufacturerRows] = await Promise.all([
         env.DB.prepare(`SELECT DISTINCT "藥品分類" FROM nhi_drugs WHERE ${coreWhere} AND "藥品分類" IS NOT NULL AND "藥品分類" != '' ORDER BY "藥品分類"`)
               .bind(...coreParams).all(),
         env.DB.prepare(`SELECT DISTINCT "劑型" FROM nhi_drugs WHERE ${coreWhere} AND "劑型" IS NOT NULL AND "劑型" != '' ORDER BY "劑型"`)
+              .bind(...coreParams).all(),
+        env.DB.prepare(`SELECT DISTINCT "藥商" FROM nhi_drugs WHERE ${coreWhere} AND "藥商" IS NOT NULL AND "藥商" != '' ORDER BY "藥商"`)
               .bind(...coreParams).all(),
       ]);
       filtersData = {
         drug_classes:  (classRows.results || []).map(r => r['藥品分類']),
         dosage_forms:  (formRows.results  || []).map(r => r['劑型']),
+        manufacturers: (manufacturerRows.results || []).map(r => r['藥商']),
       };
     }
 
@@ -215,6 +220,7 @@ export async function onRequestGet({ request, env }) {
       atc_depth:  level === 4 ? atc_depth : undefined,
       filters:    filtersData,
     });
+
 
   } catch (err) {
     return json({ error: err.message }, 500);
