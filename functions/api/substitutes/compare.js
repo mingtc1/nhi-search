@@ -33,19 +33,26 @@ export async function onRequestOptions() {
  */
 function detectLevel(target, candidate) {
   const tGroup = target['分類分組名稱'] || '';
-  const tIng   = target['成分'] || '';
-  const tForm  = target['劑型'] || '';
-  const tAtc5  = (target['ATC代碼'] || '').slice(0, 5);
-
   const cGroup = candidate['分類分組名稱'] || '';
-  const cIng   = candidate['成分'] || '';
-  const cForm  = candidate['劑型'] || '';
-  const cAtc   = candidate['ATC代碼'] || '';
 
   if (tGroup && tGroup === cGroup) return 1;
-  if (tIng && cIng === tIng && cForm === tForm) return 2;
-  if (tIng && cIng === tIng && cForm !== tForm) return 3;
-  if (tAtc5 && cAtc.startsWith(tAtc5) && cIng !== tIng) return 4;
+
+  // 解析三段結構
+  const tParts = tGroup.split(/[，,]/).map(s => s.trim());
+  const tIng   = tParts[0] || '';
+  const tStdForm = tParts.length >= 2 ? tParts[1] : '';
+
+  const cParts = cGroup.split(/[，,]/).map(s => s.trim());
+  const cIng   = cParts[0] || '';
+  const cStdForm = cParts.length >= 2 ? cParts[1] : '';
+
+  if (tIng && cIng === tIng && tStdForm && cStdForm === tStdForm) return 2;
+  if (tIng && cIng === tIng && tStdForm && cStdForm !== tStdForm) return 3;
+
+  const tAtc = (target['ATC代碼'] || '').trim();
+  const cAtc = (candidate['ATC代碼'] || '').trim();
+  if (tAtc && cAtc && tAtc.slice(0, 5) === cAtc.slice(0, 5) && tIng !== cIng) return 4;
+
   return null; // 無法歸類
 }
 
