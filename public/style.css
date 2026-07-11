@@ -1385,3 +1385,50 @@ input, select, button { font-family: inherit; }
   display: block;
   max-width: 120px;
 }
+
+/* --- Print & PDF Export Styles --- */
+@media print {
+  /* Hide everything except the compare modal */
+  body > *:not(#compareModal) {
+    display: none !important;
+  }
+  #compareModal.sub-modal-backdrop {
+    position: relative !important;
+    background: transparent !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    display: block !important;
+    z-index: auto !important;
+  }
+  #compareModal .sub-modal-panel {
+    box-shadow: none !important;
+    border: none !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  /* Hide interactive buttons and scroll hints */
+  .no-print {
+    display: none !important;
+  }
+  .sub-modal-close {
+    display: none !important;
+  }
+  .sub-badge-pro {
+    display: none !important;
+  }
+  /* Table full width and visible overflow */
+  .compare-table-wrap {
+    overflow: visible !important;
+  }
+  .compare-table {
+    width: 100% !important;
+    table-layout: auto !important;
+    font-size: 11pt !important;
+  }
+  .compare-table th, .compare-table td {
+    padding: 6px 8px !important;
+    border: 1px solid #cbd5e1 !important;
+  }
+}

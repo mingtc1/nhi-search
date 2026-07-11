@@ -1309,6 +1309,7 @@ async function generateCompareTable() {
 }
 
 // ─── 比較表渲染 ──────────────────────────────────────────────────
+// ─── 比較表渲染 ──────────────────────────────────────────────────
 const LEVEL_COLORS = { 0: '', 1: 'sub-level-1', 2: 'sub-level-2', 3: 'sub-level-3', 4: 'sub-level-4' };
 
 function renderCompareTable(target, candidates) {
@@ -1323,6 +1324,7 @@ function renderCompareTable(target, candidates) {
     ['成分', d => `<span title="${esc(d['成分'] || '')}">${esc(trunc(d['成分'] || '—', 40))}</span>`],
     ['劑型', d => d['劑型'] ? `<span class="badge badge-blue">${esc(d['劑型'])}</span>` : '—'],
     ['規格', d => esc((d['規格量'] || '') + ' ' + (d['規格單位'] || ''))],
+    ['藥商', d => esc(d['藥商'] || '—')],
     ['分類分組名稱', d => `<span title="${esc(d['分類分組名稱'] || '')}">${esc(trunc(d['分類分組名稱'] || '—', 35))}</span>`],
     ['藥品分類', d => esc(d['藥品分類'] || '—')],
     ['ATC代碼', d => `<code>${esc(d['ATC代碼'] || '—')}</code>`],
@@ -1347,7 +1349,17 @@ function renderCompareTable(target, candidates) {
   }).join('');
 
   compareBody.innerHTML = `
-    <div class="compare-scroll-hint">← 橫向捲動查看全部欄位 →</div>
+    <div class="compare-actions-bar no-print" style="display:flex; justify-content: flex-end; gap:10px; margin-bottom:12px;">
+      <button class="btn btn-ghost btn-sm" id="compareCopyText" style="display:inline-flex; align-items:center;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;margin-right:4px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        複製表格文字 (Excel)
+      </button>
+      <button class="btn btn-primary btn-sm" id="comparePrintPdf" style="display:inline-flex; align-items:center;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;margin-right:4px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        列印 / 匯出 PDF
+      </button>
+    </div>
+    <div class="compare-scroll-hint no-print">← 橫向捲動查看全部欄位 →</div>
     <div class="compare-table-wrap">
       <table class="compare-table">
         <thead><tr><th class="compare-corner"></th>${colHeaders}</tr></thead>
@@ -1359,6 +1371,44 @@ function renderCompareTable(target, candidates) {
         ⚠️ 比較表中含有「同ATC類別候選」（橘色標記欄位），為不同成分之藥品，僅供治療替代方向參考，不代表可直接替代。
       </div>` : ''}
   `;
+
+  // 綁定複製按鈕
+  document.getElementById('compareCopyText')?.addEventListener('click', () => {
+    const headerCols = ['欄位', ...all.map(d => d['藥品英文名稱'] || d['藥品代號'] || '')];
+    const textRows = [headerCols.join('\t')];
+    
+    const rawFields = [
+      ['替代層級', d => d.level === 0 ? '目標原藥' : (d.level_label || '')],
+      ['替代理由', d => d.reason || '—'],
+      ['系統提醒', d => d.warning || '—'],
+      ['藥品代號', d => d['藥品代號'] || '—'],
+      ['藥品英文名稱', d => d['藥品英文名稱'] || '—'],
+      ['藥品中文名稱', d => d['藥品中文名稱'] || '—'],
+      ['成分', d => d['成分'] || '—'],
+      ['劑型', d => d['劑型'] || '—'],
+      ['規格', d => (d['規格量'] || '') + ' ' + (d['規格單位'] || '')],
+      ['藥商', d => d['藥商'] || '—'],
+      ['分類分組名稱', d => d['分類分組名稱'] || '—'],
+      ['藥品分類', d => d['藥品分類'] || '—'],
+      ['ATC代碼', d => d['ATC代碼'] || '—'],
+      ['許可證字號', d => d['許可證字號'] || '—'],
+      ['健保給付規範連結', d => d['給付規定章節連結'] || '—']
+    ];
+
+    rawFields.forEach(([label, fn]) => {
+      const line = [label, ...all.map(fn)].join('\t');
+      textRows.push(line);
+    });
+
+    navigator.clipboard.writeText(textRows.join('\n'))
+      .then(() => showToast('已成功複製表格文字！可直接貼上 Excel 或 Word 中。', 'success'))
+      .catch(() => showToast('複製失敗，請手動選取表格複製。', 'error'));
+  });
+
+  // 綁定列印按鈕
+  document.getElementById('comparePrintPdf')?.addEventListener('click', () => {
+    window.print();
+  });
 }
 
 // ─── Modal 事件綁定 ──────────────────────────────────────────────
