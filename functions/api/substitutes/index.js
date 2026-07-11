@@ -188,6 +188,22 @@ export async function onRequestGet({ request, env }) {
       warning:     meta.warning,
     }));
 
+    // ── 從結果集中取得篩選器可用選項 ──────────────────────────────
+    // 只在第一頁且無篩選時回傳（避免每次都多一次 query）
+    let filtersData = undefined;
+    if (page === 1 && !drug_class && !dosage_form) {
+      const [classRows, formRows] = await Promise.all([
+        env.DB.prepare(`SELECT DISTINCT "藥品分類" FROM nhi_drugs WHERE ${coreWhere} AND "藥品分類" IS NOT NULL AND "藥品分類" != '' ORDER BY "藥品分類"`)
+              .bind(...coreParams).all(),
+        env.DB.prepare(`SELECT DISTINCT "劑型" FROM nhi_drugs WHERE ${coreWhere} AND "劑型" IS NOT NULL AND "劑型" != '' ORDER BY "劑型"`)
+              .bind(...coreParams).all(),
+      ]);
+      filtersData = {
+        drug_classes:  (classRows.results || []).map(r => r['藥品分類']),
+        dosage_forms:  (formRows.results  || []).map(r => r['劑型']),
+      };
+    }
+
     return json({
       level,
       page,
@@ -197,6 +213,7 @@ export async function onRequestGet({ request, env }) {
       items,
       level_meta: meta,
       atc_depth:  level === 4 ? atc_depth : undefined,
+      filters:    filtersData,
     });
 
   } catch (err) {

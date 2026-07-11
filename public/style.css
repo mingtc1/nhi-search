@@ -1357,3 +1357,20 @@ input, select, button { font-family: inherit; }
 }
 
 
+
+/* --- Sortable Column Headers ---------------------------------------- */
+.sub-th-sort {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+.sub-th-sort:hover { background: rgba(99,102,241,.08); }
+.sub-sort-icon { display:inline-block; font-size:.7rem; opacity:.5; transition:opacity .15s; }
+.sub-th-sort:hover .sub-sort-icon { opacity:1; }
+
+/* --- Improved Empty State -------------------------------------------- */
+.sub-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; padding:40px 24px; text-align:center; }
+.sub-empty-icon { font-size:2.5rem; opacity:.5; line-height:1; }
+.sub-empty-title { font-size:.95rem; font-weight:600; color:var(--text-primary,#1e293b); }
+.sub-empty-desc { font-size:.82rem; color:var(--text-light,#64748b); max-width:320px; line-height:1.5; }

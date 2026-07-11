@@ -318,18 +318,22 @@
           <div class="spinner spinner--sm"></div>
           <span>載入候選品項中...</span>
         </div>
-        <div id="subListEmpty" class="sub-empty" hidden>此層無候選品項</div>
+        <div id="subListEmpty" class="sub-empty" hidden>
+          <div class="sub-empty-icon">📋</div>
+          <div class="sub-empty-title" id="subEmptyTitle">此層無候選品項</div>
+          <div class="sub-empty-desc" id="subEmptyDesc"></div>
+        </div>
         <table class="sub-table" id="subTable" hidden>
           <thead>
             <tr>
               <th class="sub-th-check"><input type="checkbox" id="subCheckAll" aria-label="全選此頁"></th>
-              <th>藥品代號</th>
-              <th>藥品名稱</th>
-              <th>成分</th>
-              <th>劑型</th>
-              <th>規格</th>
+              <th class="sub-th-sort" data-sort="藥品代號">藥品代號 <span class="sub-sort-icon" data-col="藥品代號"></span></th>
+              <th class="sub-th-sort" data-sort="藥品中文名稱">藥品名稱 <span class="sub-sort-icon" data-col="藥品中文名稱"></span></th>
+              <th class="sub-th-sort" data-sort="成分">成分 <span class="sub-sort-icon" data-col="成分"></span></th>
+              <th class="sub-th-sort" data-sort="劑型">劑型 <span class="sub-sort-icon" data-col="劑型"></span></th>
+              <th class="sub-th-sort" data-sort="規格量">規格 <span class="sub-sort-icon" data-col="規格量"></span></th>
               <th>藥品分類</th>
-              <th>ATC代碼</th>
+              <th class="sub-th-sort" data-sort="ATC代碼">ATC代碼 <span class="sub-sort-icon" data-col="ATC代碼"></span></th>
               <th>許可證字號</th>
               <th>給付規範</th>
             </tr>

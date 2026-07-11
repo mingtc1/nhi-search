@@ -945,13 +945,23 @@ const subState = {
   totalItems: 0,
   selectedIds: new Set(),
   filters: { drug_class: '', dosage_form: '', has_license: '' },
+  sort: '',
+  order: 'asc',
+  atcDepth: 5,
   levelWarnings: {
     1: '依健保分類分組產生，請確認適應症、給付條件與院內供應狀態。',
-    2: '規格或含量可能不同，請確認是否需劑量換算。',
+    2: '含量規格不同，使用前請確認劑量換算與給付條件。',
     3: '劑型不同，請確認給藥途徑、釋放特性與臨床可替代性。',
     4: '不同成分，僅供治療替代參考。請重新評估適應症、劑量、禁忌、交互作用與健保給付條件。',
   },
+  levelEmptyMessages: {
+    1: { title: '此藥品無健保同分組候選', desc: '在健保資料中，未找到分類分組名稱完全相同的其他市售品項。' },
+    2: { title: '此藥品無同劑型異劑量候選', desc: '在健保資料中，未找到相同成分與標準劑型類別、但劑量不同的市售品項。' },
+    3: { title: '此藥品無同成分異劑型候選', desc: '在健保資料中，未找到相同成分但劑型類別不同的市售品項。' },
+    4: { title: '此 ATC 類別無其他成分候選', desc: '在健保資料中，未找到相同 ATC 廣品理分類下、不同成分的市售品項。' },
+  },
 };
+
 
 // ─── DOM refs for Modal ──────────────────────────────────────────
 const subModal          = document.getElementById('substituteModal');
@@ -979,6 +989,8 @@ const subFilterClear    = document.getElementById('subFilterClear');
 const subFilterCount    = document.getElementById('subFilterCount');
 const subAtcDepthWrap   = document.getElementById('subAtcDepthWrap');
 const subAtcDepth       = document.getElementById('subAtcDepth');
+const subEmptyTitle     = document.getElementById('subEmptyTitle');
+const subEmptyDesc      = document.getElementById('subEmptyDesc');
 const compareModal      = document.getElementById('compareModal');
 const compareModalClose = document.getElementById('compareModalClose');
 const compareLoading    = document.getElementById('compareLoading');
@@ -992,6 +1004,9 @@ async function openSubstituteModal(drugId) {
   subState.selectedIds  = new Set();
   subState.filters      = { drug_class: '', dosage_form: '', has_license: '' };
   subState.atcDepth     = 5;
+  subState.sort         = '';
+  subState.order        = 'asc';
+  updateSortIcons();
   updateSelectedCount();
 
   // 重置篩選器
@@ -1066,6 +1081,8 @@ async function loadSubList() {
   if (subState.filters.drug_class)  params.set('drug_class',  subState.filters.drug_class);
   if (subState.filters.dosage_form) params.set('dosage_form', subState.filters.dosage_form);
   if (subState.filters.has_license !== '') params.set('has_license', subState.filters.has_license);
+  if (subState.sort)  params.set('sort',  subState.sort);
+  if (subState.order) params.set('order', subState.order);
 
   try {
     const res  = await fetch(`${API_BASE}/substitutes?${params}`);
@@ -1084,6 +1101,9 @@ async function loadSubList() {
     updateSubPagination(data.total, data.page, data.pageSize);
     subFilterCount.textContent = `共 ${data.total.toLocaleString()} 筆`;
     showSubListState('table');
+    
+    // 更新篩選器選單
+    if (data.filters) populateFilterDropdowns(data.filters);
 
   } catch (err) {
     showToast('載入候選清單失敗：' + err.message, 'error');
@@ -1197,6 +1217,51 @@ function showSubListState(state) {
   subListEmpty.hidden   = state !== 'empty';
   subTable.hidden       = state !== 'table';
   subPagination.hidden  = state !== 'table';
+  if (state === 'empty') {
+    const msg = subState.levelEmptyMessages[subState.currentLevel];
+    if (msg) {
+      if (subEmptyTitle) subEmptyTitle.textContent = msg.title;
+      if (subEmptyDesc)  subEmptyDesc.textContent  = msg.desc;
+    }
+  }
+}
+
+// ─── 排序圖示更新 ────────────────────────────────────────────────
+function updateSortIcons() {
+  document.querySelectorAll('.sub-sort-icon').forEach(el => {
+    const col = el.dataset.col;
+    if (col === subState.sort) {
+      el.textContent = subState.order === 'asc' ? ' ▲' : ' ▼';
+    } else {
+      el.textContent = ' ▵';
+    }
+  });
+}
+
+// ─── 動態填入篩選器選項 ──────────────────────────────────────────
+function populateFilterDropdowns(filters) {
+  if (subFilterClass && filters.drug_classes) {
+    const currentVal = subFilterClass.value;
+    subFilterClass.innerHTML = '<option value="">全部藥品分類</option>';
+    filters.drug_classes.forEach(cls => {
+      const opt = document.createElement('option');
+      opt.value = cls;
+      opt.textContent = cls;
+      if (cls === currentVal) opt.selected = true;
+      subFilterClass.appendChild(opt);
+    });
+  }
+  if (subFilterForm && filters.dosage_forms) {
+    const currentVal = subFilterForm.value;
+    subFilterForm.innerHTML = '<option value="">全部劑型</option>';
+    filters.dosage_forms.forEach(form => {
+      const opt = document.createElement('option');
+      opt.value = form;
+      opt.textContent = form;
+      if (form === currentVal) opt.selected = true;
+      subFilterForm.appendChild(opt);
+    });
+  }
 }
 
 // ─── 比較表產生 ──────────────────────────────────────────────────
@@ -1286,6 +1351,9 @@ function renderCompareTable(target, candidates) {
     const level = parseInt(tab.dataset.level);
     subState.currentLevel = level;
     subState.currentPage  = 1;
+    subState.sort         = '';  // Tab 切換時重置排序
+    subState.order        = 'asc';
+    updateSortIcons();
     subTabs.querySelectorAll('.sub-tab').forEach(t => {
       t.classList.toggle('sub-tab--active', t === tab);
       t.setAttribute('aria-selected', String(t === tab));
@@ -1361,6 +1429,23 @@ function renderCompareTable(target, candidates) {
       await loadSubList();
     });
   }
+
+  // 表頭排序
+  document.getElementById('subTable')?.addEventListener('click', async e => {
+    const th = e.target.closest('.sub-th-sort');
+    if (!th) return;
+    const col = th.dataset.sort;
+    if (!col) return;
+    if (subState.sort === col) {
+      subState.order = subState.order === 'asc' ? 'desc' : 'asc';
+    } else {
+      subState.sort  = col;
+      subState.order = 'asc';
+    }
+    subState.currentPage = 1;
+    updateSortIcons();
+    await loadSubList();
+  });
 
   // 清除勾選
   subClearSelected.addEventListener('click', () => {
